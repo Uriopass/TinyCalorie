@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Calorie</title>
+</head>
+</html>
+<style>
+    body {
+        display: flex;
+        align-content: center;
+        flex-direction: column;
+    }
+
+    .header-container {
+        display: flex;
+        justify-content: center;
+    }
+
+    #header {
+        border: 1px solid #d0d0d0;
+        border-radius: 3px;
+        padding: 20px 30px;
+        display: flex;
+    }
+
+    .items-container {
+        display: flex;
+        justify-content: center;
+    }
+
+    #items {
+        border: 1px solid #d0d0d0;
+        border-radius: 3px;
+        padding: 20px 30px;
+        display: flex;
+        margin-top: 10px;
+        flex-flow: column;
+    }
+
+    .item {
+        display: flex;
+        padding: 10px;
+        justify-content: space-between;
+        min-width: 500px;
+        border-top: 1px solid #d0d0d0;
+    }
+
+    .total {
+        display: flex;
+        padding: 10px;
+        justify-content: space-between;
+        min-width: 500px;
+        font-weight: bold;
+    }
+
+    .item-multiplier {
+        font-size: 0.8rem;
+        padding-right: 5px;
+        color: gray;
+    }
+
+    .item-end {
+        display: flex;
+        align-items: center;
+    }
+
+    .item-time {
+        color: #a8a8a8;
+        padding-right: 10px;
+    }
+
+    .autocomplete {
+        position: relative;
+        display: inline-block;
+    }
+
+    #calories_multiplier {
+        padding-left: 15px;
+        width: 40px;
+    }
+
+    #calories_multiplier_label {
+        position: absolute;
+        left: 10px;
+        top: 50%;
+        transform: translate(0, -50%) translate(0, -1px);
+        color: gray;
+    }
+
+    .calories_multiplier_container {
+        position: relative;
+    }
+
+    .autocomplete-items {
+        position: absolute;
+        border: 1px solid #d4d4d4;
+        border-bottom: none;
+        border-top: none;
+        z-index: 99;
+        top: 100%;
+        left: 0;
+        right: 0;
+    }
+
+    .autocomplete-items div {
+        padding: 10px;
+        cursor: pointer;
+        background-color: #fff;
+        border-bottom: 1px solid #d4d4d4;
+    }
+
+    .autocomplete-items div:hover {
+        background-color: #e9e9e9;
+    }
+
+    .autocomplete-active {
+        background-color: DodgerBlue !important;
+        color: #ffffff;
+    }
+
+    input {
+        margin: 5px;
+    }
+
+    .total .calories {
+        padding-right: 15px;
+    }
+
+    .calories {
+        padding-right: 5px;
+    }
+
+    .item-delete {
+        color: red;
+        cursor: pointer;
+        width: 10px;
+        font-size: 10px;
+        display: flex;
+        align-items: center;
+    }
+</style>
+<body>
+<div class="header-container">
+    <div id="header">
+        <div class="autocomplete">
+            <input id="calories_name" autocomplete="false" type="text" placeholder="Nom"/>
+        </div>
+        <div class="calories_multiplier_container">
+            <span id="calories_multiplier_label">×</span>
+            <input id="calories_multiplier" autocomplete="false" type="number" value="1"/>
+        </div>
+        <input id="calories_calories" autocomplete="false" type="number" placeholder="Calories"/>
+    </div>
+</div>
+<div class="items-container">
+    <div id="items">
+    </div>
+</div>
+</body>
+<script>
+    function renderItem(item) {
+        let d = new Date(item.timestamp * 1000);
+        let formatted = d.toLocaleTimeString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false,
+        });
+
+        return `<div class="item">
+                    <div class="item-end">
+                        <div class="item-multiplier">x${item.multiplier}</div>
+                        <div class="name">${item.name}</div>
+                    </div>
+                    <div class="item-end">
+                        <div class="item-time">${formatted}</div>
+                        <div class="calories">${item.calories * item.multiplier}</div>
+                        <div class="item-delete" onclick="deleteItem(${item.id})">❌</div>
+                    </div>
+                </div>`;
+    }
+
+    function renderItems(date) {
+        let url = "/api/summary";
+        if (date) {
+            url += date;
+        }
+
+        let itemsDiv = document.getElementById("items");
+        fetch(url, {
+            method: "get",
+            cache: "no-cache",
+        }).then((v) => {
+            if (!v.ok) {
+                throw 'Request failed, status: ' + v.status;
+            }
+            return v.json();
+        }).then((summary) => {
+            itemsDiv.innerHTML = `
+                    <div class="total">
+                        Total
+                        <div class="calories">${summary.total}</div>
+                    </div>`;
+
+            for (let item of summary.items) {
+                itemsDiv.innerHTML += renderItem(item);
+            }
+        }).catch((e) => {
+            console.log(e);
+            itemsDiv.innerHTML = `<span style="color:red">Internal error: ${e}</span>`;
+        })
+    }
+
+    function init() {
+        let onAdd = () => {
+            if (!document.getElementById("calories_calories").value) {
+                return
+            }
+            addItem(document.getElementById("calories_name").value, document.getElementById("calories_calories").value, document.getElementById("calories_multiplier").value).then((res) => {
+                    if (!res.ok) {
+                        return;
+                    }
+                    renderItems();
+                });
+            document.getElementById("calories_name").value = "";
+            document.getElementById("calories_calories").value = "";
+            document.getElementById("calories_multiplier").value = "1";
+        }
+
+        let onInput = (text) => [[text, text, text, text, text, text], [50, 100, 200, 300, 400, 700]];
+        let onSubmit = (text, data) => {
+            document.getElementById("calories_name").value = text;
+            document.getElementById("calories_calories").value = data;
+        }
+        let onSubmitEmpty = () => {
+            onAdd();
+        }
+        autocomplete(document.getElementById("calories_name"), onInput, onSubmit, onSubmitEmpty);
+        document.getElementById("calories_calories").onkeydown = (e) => {
+            if (e.key === "Enter" && document.getElementById("calories_calories").value) {
+                onAdd();
+            }
+        }
+        document.getElementById("calories_multiplier").onkeydown = (e) => {
+            if (e.key === "Enter" && document.getElementById("calories_calories").value) {
+                onAdd();
+            }
+        }
+        renderItems();
+    }
+
+    function deleteItem(id) {
+        fetch(`/api/item/${id}`, {method: "delete"}).then((v) => {
+            if (!v.ok) {
+                return;
+            }
+            renderItems();
+        })
+    }
+
+    async function addItem(name, calories, multiplier) {
+        let cal = parseInt(calories, 10);
+        if (isNaN(cal)) {
+            return new Promise(resolve => resolve({ok: false}));
+        }
+
+        let mul = parseInt(multiplier, 10);
+        if (isNaN(mul)) {
+            return new Promise(resolve => resolve({ok: false}));
+        }
+
+        return fetch(`/api/item`, {
+            method: "post",
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name, calories: cal, multiplier: mul}),
+        });
+    }
+
+    function autocomplete(inp, onInput, onSubmit, onSubmitEmpty) {
+        let currentFocus;
+        inp.addEventListener("input", function () {
+            let a, b, i, val = this.value;
+            closeAllLists();
+            if (!val) {
+                return false;
+            }
+            currentFocus = -1;
+            a = document.createElement("DIV");
+            a.setAttribute("id", this.id + "autocomplete-list");
+            a.setAttribute("class", "autocomplete-items");
+            this.parentNode.appendChild(a);
+            let [arr, data] = onInput(val);
+            for (i = 0; i < arr.length; i++) {
+                let val = arr[i];
+                let d = data[i];
+                b = document.createElement("DIV");
+                b.innerHTML = `<span>${val}</span><span>${d}</span>`;
+                b.style.display = "flex";
+                b.style.justifyContent = "space-between";
+                b.addEventListener("click", function () {
+                    onSubmit(val, d);
+                    closeAllLists();
+                });
+                a.appendChild(b);
+            }
+        });
+
+        inp.addEventListener("keydown", function (e) {
+            let x = document.getElementById(this.id + "autocomplete-list");
+            if (x) x = x.getElementsByTagName("div");
+            if (e.keyCode === 40) { // DOWN
+                currentFocus++;
+                addActive(x);
+            } else if (e.keyCode === 38) { // UP
+                currentFocus--;
+                addActive(x);
+            } else if (e.keyCode === 13) { // ENTER
+                e.preventDefault();
+                if (currentFocus > -1) {
+                    if (x) x[currentFocus].click();
+                } else {
+                    onSubmitEmpty();
+                }
+            }
+        });
+
+        function addActive(x) {
+            if (!x) return false;
+            removeActive(x);
+            if (currentFocus >= x.length) currentFocus = 0;
+            if (currentFocus < 0) currentFocus = (x.length - 1);
+            x[currentFocus].classList.add("autocomplete-active");
+        }
+
+        function removeActive(x) {
+            for (let i = 0; i < x.length; i++) {
+                x[i].classList.remove("autocomplete-active");
+            }
+        }
+
+        function closeAllLists(elmnt) {
+            currentFocus = -1;
+            let x = document.getElementsByClassName("autocomplete-items");
+            for (let i = 0; i < x.length; i++) {
+                if (elmnt !== x[i] && elmnt !== inp) {
+                    x[i].parentNode.removeChild(x[i]);
+                }
+            }
+        }
+
+        document.addEventListener("click", function (e) {
+            closeAllLists(e.target);
+        });
+    }
+
+    init();
+</script>
