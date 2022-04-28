@@ -2,6 +2,7 @@ mod db;
 mod migrate;
 mod search;
 
+use crate::search::SearchItem;
 use axum::extract::Path;
 use axum::response::Html;
 use axum::{
@@ -14,9 +15,9 @@ use chrono::Utc;
 use db::Database;
 use include_dir::{include_dir, Dir};
 use r2d2_sqlite::rusqlite::{params, Connection};
+use search::Searcher;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use std::sync::Arc;
 
 pub static MIGRATIONS: Dir = include_dir!("migrations");
 
@@ -24,21 +25,21 @@ pub static MIGRATIONS: Dir = include_dir!("migrations");
 struct Item {
     id: u64,
     name: String,
-    calories: i64,
-    multiplier: i64,
+    calories: f64,
+    multiplier: f64,
     timestamp: u64,
 }
 
 #[derive(Serialize)]
 struct Summary {
-    total: i64,
+    total: f64,
     items: Vec<Item>,
 }
 
 impl Default for Summary {
     fn default() -> Self {
         Self {
-            total: 0,
+            total: 0.0,
             items: vec![],
         }
     }
@@ -47,8 +48,8 @@ impl Default for Summary {
 #[derive(Debug, Serialize, Deserialize)]
 struct AddItem {
     name: String,
-    calories: i64,
-    multiplier: i64,
+    calories: f64,
+    multiplier: f64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -61,13 +62,23 @@ async fn main() {
     tracing_subscriber::fmt::init();
     let db = Database::new("db.db").expect("could not open db");
 
+    tracing::info!(
+        "sqlite version: {}",
+        db.connection()
+            .unwrap()
+            .query_row("select sqlite_version();", [], |v| v
+                .get::<usize, String>(0))
+            .unwrap()
+    );
+
     migrate::migrate(&db.0, &MIGRATIONS).expect("could not run migrations");
-    let matcher = Arc::new(fuzzy_matcher::skim::SkimMatcherV2::default());
+    let matcher = search::Searcher::new(&*db.connection().expect("could not get connection"));
 
     let app = Router::new()
         .route("/", get(root))
         .route("/api/item", post(add_item))
         .route("/api/item/:id", delete(remove_item))
+        .route("/api/autocomplete/:qry", get(autocomplete))
         .route("/api/summary", get(summary))
         .route("/api/summary/:date", get(summary_date))
         .layer(Extension(matcher))
@@ -90,13 +101,13 @@ async fn root() -> Html<&'static str> {
     Html(include_str!("../index.html"))
 }
 
-async fn autocomplete(Extension(db): Extension<Database>) -> impl IntoResponse {
-    tracing::info!("getting summary");
-    let conn = db.connection().expect("could not get connection");
-    let now = Utc::now().with_timezone(&chrono_tz::Europe::Paris);
-    let date = now.date().format("YYYY-MM-DD").to_string();
-    let summary = mk_summary(&conn, date);
-    (StatusCode::OK, Json(summary))
+async fn autocomplete(
+    Path(qry): Path<String>,
+    Extension(search): Extension<Searcher>,
+) -> impl IntoResponse {
+    tracing::info!("autocomplete: {}", &qry);
+    let res = search.search(&qry);
+    (StatusCode::OK, Json(res))
 }
 
 async fn summary_date(
@@ -114,7 +125,7 @@ async fn summary_date(
     }
 
     let conn = db.connection().expect("could not get connection");
-    let summary = mk_summary(&conn, date);
+    let summary = mk_summary(&*conn, date);
     (StatusCode::OK, Json(summary))
 }
 
@@ -123,7 +134,7 @@ async fn summary(Extension(db): Extension<Database>) -> impl IntoResponse {
     let conn = db.connection().expect("could not get connection");
     let now = Utc::now().with_timezone(&chrono_tz::Europe::Paris);
     let date = now.date().format("YYYY-MM-DD").to_string();
-    let summary = mk_summary(&conn, date);
+    let summary = mk_summary(&*conn, date);
     (StatusCode::OK, Json(summary))
 }
 
@@ -156,33 +167,48 @@ fn mk_summary(conn: &Connection, date: String) -> Summary {
 
 async fn add_item(
     Extension(db): Extension<Database>,
+    Extension(search): Extension<Searcher>,
     Json(item): Json<AddItem>,
 ) -> impl IntoResponse {
     tracing::info!("adding item {:?}", item);
     let conn = db.connection().expect("could not get connection");
     let now = Utc::now().with_timezone(&chrono_tz::Europe::Paris);
-    if let Err(e) = conn.execute(
-        "INSERT INTO items (name, calories, multiplier, date, timestamp) VALUES (?1, ?2, ?3, ?4, ?5);",
-        params![
+    let id = conn
+        .query_row(
+            "INSERT INTO items (name, calories, multiplier, date, timestamp) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id;",
+            params![
             item.name,
             item.calories,
             item.multiplier,
             now.date().format("YYYY-MM-DD").to_string(),
             now.timestamp()
-        ],
-    ) {
-        tracing::error!("error in add_item: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
-    }
+        ]
+                , |row| {
+                row.get("id")
+            }
+        )
+        .expect("could not prepare qry");
+    search.insert(
+        id,
+        SearchItem {
+            name: item.name,
+            calories: item.calories,
+        },
+    );
     StatusCode::CREATED
 }
 
-async fn remove_item(Extension(db): Extension<Database>, Path(id): Path<u64>) -> impl IntoResponse {
+async fn remove_item(
+    Extension(db): Extension<Database>,
+    Extension(search): Extension<Searcher>,
+    Path(id): Path<u64>,
+) -> impl IntoResponse {
     tracing::info!("removing item {}", id);
     let conn = db.connection().expect("could not get connection");
     if let Err(e) = conn.execute("DELETE FROM items WHERE id = ?1;", &[&id]) {
         tracing::error!("error in remove_item: {}", e);
         return StatusCode::INTERNAL_SERVER_ERROR;
     }
+    search.remove(id);
     StatusCode::CREATED
 }

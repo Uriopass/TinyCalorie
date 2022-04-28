@@ -2,8 +2,8 @@ CREATE TABLE IF NOT EXISTS items
 (
     id integer primary key autoincrement,
     name text,
-    calories integer,
-    multiplier integer,
+    calories real,
+    multiplier real,
     date text, -- stored as 'YYYY-MM-DD'
     timestamp integer
 );
