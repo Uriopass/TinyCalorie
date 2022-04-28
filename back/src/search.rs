@@ -43,7 +43,7 @@ impl Searcher {
         }
 
         Self(Arc::new(SearcherInner {
-            matcher: SkimMatcherV2::default(),
+            matcher: SkimMatcherV2::default().ignore_case(),
             items: RwLock::new(items),
         }))
     }
