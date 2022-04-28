@@ -8,9 +8,15 @@
 </html>
 <style>
     body {
+        margin: 0;
+        padding: 0;
+    }
+
+    #main {
         display: flex;
-        align-content: center;
+        align-items: center;
         flex-direction: column;
+        justify-content: center;
     }
 
     .header-container {
@@ -23,35 +29,34 @@
         border-radius: 3px;
         padding: 20px 30px;
         display: flex;
-    }
-
-    .items-container {
-        display: flex;
-        justify-content: center;
+        flex-wrap: wrap;
+        align-items: center;
+        width: calc(min(800px, 100% - 22px));
     }
 
     #items {
         border: 1px solid #d0d0d0;
         border-radius: 3px;
-        padding: 20px 30px;
+        padding: 20px 0px;
         display: flex;
         margin-top: 10px;
         flex-flow: column;
+        flex-wrap: wrap;
+        width: calc(min(800px, 100%));
     }
 
     .item {
         display: flex;
         padding: 10px;
+        width: calc(100% - 42px);
+        margin-left: 10px;
+        margin-right: 10px;
         justify-content: space-between;
-        min-width: 500px;
         border-top: 1px solid #d0d0d0;
     }
 
     .total {
-        display: flex;
-        padding: 10px;
-        justify-content: space-between;
-        min-width: 500px;
+        border: none;
         font-weight: bold;
     }
 
@@ -66,9 +71,25 @@
         align-items: center;
     }
 
+    .item-start {
+        display: flex;
+        align-items: center;
+        flex-shrink: 1;
+    }
+
     .item-time {
         color: #a8a8a8;
         padding-right: 10px;
+    }
+
+    .item-name {
+        text-overflow: ellipsis;
+    }
+
+    #submit {
+        font-size: 10px;
+        padding: 1px 3px;
+        height: 20px;
     }
 
     .autocomplete {
@@ -142,19 +163,20 @@
     }
 </style>
 <body>
-<div class="header-container">
-    <div id="header">
-        <div class="autocomplete">
-            <input id="calories_name" autocomplete="false" type="text" placeholder="Nom"/>
+<div id="main">
+    <div class="header-container">
+        <div id="header">
+            <div class="autocomplete">
+                <input id="calories_name" autocomplete="false" type="text" placeholder="Nom"/>
+            </div>
+            <div class="calories_multiplier_container">
+                <span id="calories_multiplier_label">×</span>
+                <input id="calories_multiplier" autocomplete="false" type="number" value="1"/>
+            </div>
+            <input id="calories_calories" autocomplete="false" type="number" placeholder="Calories"/>
+            <button id="submit">OK</button>
         </div>
-        <div class="calories_multiplier_container">
-            <span id="calories_multiplier_label">×</span>
-            <input id="calories_multiplier" autocomplete="false" type="number" value="1"/>
-        </div>
-        <input id="calories_calories" autocomplete="false" type="number" placeholder="Calories"/>
     </div>
-</div>
-<div class="items-container">
     <div id="items">
     </div>
 </div>
@@ -163,7 +185,7 @@
     function renderRound(v) {
         let fract = Math.round(v * 100) % 100;
         let real = Math.round(v);
-        if(fract === 0) {
+        if (fract === 0) {
             return `${real}`;
         }
         if (fract % 10 === 0) {
@@ -182,9 +204,9 @@
         });
 
         return `<div class="item">
-                    <div class="item-end">
+                    <div class="item-start">
                         <div class="item-multiplier">x${item.multiplier}</div>
-                        <div class="name">${item.name}</div>
+                        <div class="item-name">${item.name}</div>
                     </div>
                     <div class="item-end">
                         <div class="item-time">${formatted}</div>
@@ -211,7 +233,7 @@
             return v.json();
         }).then((summary) => {
             itemsDiv.innerHTML = `
-                    <div class="total">
+                    <div class="item total">
                         Total
                         <div class="calories">${Math.round(summary.total)}</div>
                     </div>`;
@@ -274,6 +296,7 @@
                 onAdd();
             }
         }
+        document.getElementById("submit").onclick = onAdd;
         renderItems();
     }
 

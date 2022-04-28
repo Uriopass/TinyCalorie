@@ -68,6 +68,9 @@ impl Searcher {
         let items = self.0.items.read().expect("could not lock read");
         let mut results = vec![];
         for (&id, item) in &*items {
+            if item.name.len() == 0 {
+                continue;
+            }
             let res = self.0.matcher.fuzzy(&*item.name, qry, true);
             if res.is_none() {
                 continue;
