@@ -1,7 +1,7 @@
 use fuzzy_matcher::skim::SkimMatcherV2;
 use r2d2_sqlite::rusqlite::Connection;
 use serde::Serialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 pub struct SearchItem {
@@ -67,8 +67,9 @@ impl Searcher {
     pub fn search(&self, qry: &str) -> Vec<SearchResult> {
         let items = self.0.items.read().expect("could not lock read");
         let mut results = vec![];
+        let mut seen = HashSet::new();
         for (&id, item) in &*items {
-            if item.name.len() == 0 {
+            if item.name.len() == 0 || !seen.insert(&*item.name) {
                 continue;
             }
             let res = self.0.matcher.fuzzy(&*item.name, qry, true);
@@ -78,7 +79,7 @@ impl Searcher {
             let (score, pos) = res.unwrap();
             results.push((score, id, pos));
         }
-        results.sort_unstable();
+        results.sort_unstable_by_key(|(score, id, _)| (*score, !*id));
         results
             .into_iter()
             .take(5)
