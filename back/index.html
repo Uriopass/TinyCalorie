@@ -273,7 +273,7 @@
         }).then((summary) => {
             let total = Math.round(summary.total);
             let budget_left = Math.round(parseFloat(conf.budget) - total);
-            let weight_loss_grams = Math.round((parseFloat(conf.metabolism) - total) / 7);
+            let weight_loss_grams = Math.round((parseFloat(conf.metabolism) - total) / 7.2);
 
             itemsDiv.innerHTML = `
                     <div class="item total">
