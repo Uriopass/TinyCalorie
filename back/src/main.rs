@@ -5,7 +5,6 @@ mod search;
 use crate::search::SearchItem;
 use axum::extract::Path;
 use axum::http::header::CONTENT_TYPE;
-use axum::http::HeaderMap;
 use axum::response::{AppendHeaders, Html};
 use axum::{
     http::StatusCode,
