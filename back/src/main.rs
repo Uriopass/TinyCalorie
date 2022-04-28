@@ -4,7 +4,9 @@ mod search;
 
 use crate::search::SearchItem;
 use axum::extract::Path;
-use axum::response::Html;
+use axum::http::header::CONTENT_TYPE;
+use axum::http::HeaderMap;
+use axum::response::{AppendHeaders, Html};
 use axum::{
     http::StatusCode,
     response::IntoResponse,
@@ -76,6 +78,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(root))
+        .route("/icon.ico", get(icon))
         .route("/api/item", post(add_item))
         .route("/api/item/:id", delete(remove_item))
         .route("/api/autocomplete/:qry", get(autocomplete))
@@ -99,6 +102,16 @@ async fn main() {
 async fn root() -> Html<&'static str> {
     tracing::info!("rendering root");
     Html(include_str!("../index.html"))
+}
+
+const ICON_FILE: &[u8] = include_bytes!("../icon.ico");
+
+async fn icon() -> impl IntoResponse {
+    tracing::info!("rendering icon");
+    (
+        AppendHeaders([(CONTENT_TYPE, "application/x-icon")]),
+        ICON_FILE,
+    )
 }
 
 async fn autocomplete(
