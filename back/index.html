@@ -166,6 +166,9 @@
         if(fract === 0) {
             return `${real}`;
         }
+        if (fract % 10 === 0) {
+            fract = fract / 10;
+        }
         return `${real}.${fract}`;
     }
 
@@ -210,7 +213,7 @@
             itemsDiv.innerHTML = `
                     <div class="total">
                         Total
-                        <div class="calories">${summary.total}</div>
+                        <div class="calories">${Math.round(summary.total)}</div>
                     </div>`;
 
             for (let item of summary.items) {
