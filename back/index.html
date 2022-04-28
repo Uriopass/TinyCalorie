@@ -60,7 +60,13 @@
 
     .total {
         border: none;
-        font-weight: bold;
+        display: flex;
+        flex-flow: column;
+    }
+
+    .item-total-row {
+        display: flex;
+        justify-content: space-between;
     }
 
     .item-multiplier {
@@ -156,6 +162,22 @@
         padding-right: 5px;
     }
 
+    #footer {
+        display: flex;
+        flex-flow: column;
+        align-items: center;
+        padding: 10px 0;
+        width: calc(min(600px, 100%));
+        border: 1px solid #d0d0d0;
+        margin-top: 10px
+    }
+
+    .footer-content {
+        display: flex;
+        flex-flow: column;
+        align-items: end;
+    }
+
     .item-delete {
         color: red;
         cursor: pointer;
@@ -182,9 +204,23 @@
     </div>
     <div id="items">
     </div>
+    <div id="footer">
+        <div class="footer-content">
+            <label>
+                Métabolisme
+                <input id="calories_metabolism" type="number" autocomplete="false"/>
+            </label>
+            <label>
+                Budget
+                <input id="calories_budget" type="number" autocomplete="false"/>
+            </label>
+        </div>
+    </div>
 </div>
 </body>
 <script>
+    let conf;
+
     function renderRound(v) {
         let fract = Math.round(v * 100) % 100;
         let real = Math.round(v);
@@ -234,10 +270,24 @@
             }
             return v.json();
         }).then((summary) => {
+            let total = Math.round(summary.total);
+            let budget_left = Math.round(parseFloat(conf.budget) - total);
+            let weight_loss_grams = Math.round((parseFloat(conf.metabolism) - total) / 7);
+
             itemsDiv.innerHTML = `
                     <div class="item total">
-                        Total
-                        <div class="calories">${Math.round(summary.total)}</div>
+                        <div class="item-total-row">
+                            Total
+                            <div class="calories">${total}</div>
+                        </div>
+                        <div class="item-total-row">
+                            Budget restant
+                            <div class="calories">${budget_left}</div>
+                        </div>
+                        <div class="item-total-row">
+                            Poids perdu aujourd'hui
+                            <div class="calories">${weight_loss_grams}g</div>
+                        </div>
                     </div>`;
 
             for (let item of summary.items) {
@@ -249,7 +299,50 @@
         })
     }
 
+    let syncval = {};
+    function updateConf(key, value, onsucceed) {
+        if (syncval[key] === undefined) {
+            syncval[key] = 0;
+        }
+        syncval[key] += 1;
+        let cpy = syncval[key];
+        fetch("/api/conf", {
+            method: 'post',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({key: 'metabolism', value: value})
+        }).then((v) => {
+            if (!v.ok) {
+                return;
+            }
+            if(syncval[key] !== cpy) {
+                return;
+            }
+            conf[key] = value;
+            onsucceed();
+        })
+    }
+
     function init() {
+        fetch("/api/conf", {method: 'get'}).then((v) => {
+            if (!v.ok) {
+                throw 'oh no';
+            }
+            return v.json();
+        }).then((x) => {
+            conf = x;
+            document.getElementById("calories_metabolism").value = conf.metabolism;
+            document.getElementById("calories_budget").value = conf.budget;
+        }).catch(() => {
+        });
+
+        document.getElementById("calories_metabolism").oninput = () => {
+            updateConf('metabolism', document.getElementById("calories_metabolism").value, renderItems);
+        };
+
+        document.getElementById("calories_budget").oninput = () => {
+            updateConf('budget', document.getElementById("calories_budget").value, renderItems);
+        };
+
         let onAdd = () => {
             if (!document.getElementById("calories_calories").value) {
                 return

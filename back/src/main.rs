@@ -18,6 +18,7 @@ use include_dir::{include_dir, Dir};
 use r2d2_sqlite::rusqlite::{params, Connection};
 use search::Searcher;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 
 pub static MIGRATIONS: Dir = include_dir!("migrations");
@@ -73,11 +74,12 @@ async fn main() {
     );
 
     migrate::migrate(&db.0, &MIGRATIONS).expect("could not run migrations");
-    let matcher = search::Searcher::new(&*db.connection().expect("could not get connection"));
+    let matcher = Searcher::new(&*db.connection().expect("could not get connection"));
 
     let app = Router::new()
         .route("/", get(root))
         .route("/icon.ico", get(icon))
+        .route("/api/conf", get(get_conf).post(set_conf))
         .route("/api/item", post(add_item))
         .route("/api/item/:id", delete(remove_item))
         .route("/api/autocomplete/:qry", get(autocomplete))
@@ -175,6 +177,42 @@ fn mk_summary(conn: &Connection, date: String) -> Summary {
         total: items.iter().map(|x| x.calories * x.multiplier).sum(),
         items,
     }
+}
+
+#[derive(Deserialize)]
+pub struct ConfSet {
+    key: String,
+    value: String,
+}
+
+async fn set_conf(
+    Extension(db): Extension<Database>,
+    Json(confset): Json<ConfSet>,
+) -> impl IntoResponse {
+    tracing::info!("setting conf: {} = {}", &confset.key, &confset.value);
+    let conn = db.connection().expect("could not get connection");
+    conn.execute(
+        "INSERT INTO conf (key, value) VALUES (?1, ?2) ON CONFLICT DO UPDATE SET value = ?2;",
+        params![confset.key, confset.value],
+    )
+    .expect("could not prepare qry");
+    StatusCode::CREATED
+}
+
+async fn get_conf(Extension(db): Extension<Database>) -> impl IntoResponse {
+    tracing::info!("getting conf");
+    let conn = db.connection().expect("could not get connection");
+    let mut qry = conn
+        .prepare("SELECT key, value FROM conf;")
+        .expect("could not prepare qry");
+    let mut rows = qry.query([]).expect("could not do query");
+    let mut v: HashMap<String, String> = HashMap::new();
+
+    while let Ok(Some(row)) = rows.next() {
+        v.insert(row.get_unwrap("key"), row.get_unwrap("value"));
+    }
+
+    (StatusCode::CREATED, Json(v))
 }
 
 async fn add_item(
