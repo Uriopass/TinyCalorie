@@ -89,6 +89,7 @@ async fn main() {
         .route("/api/autocomplete/:qry", get(autocomplete))
         .route("/api/summary", get(summary))
         .route("/api/summary/:date", get(summary_date))
+        .route("/api/calendar_data/:date", get(calendar_data))
         .layer(Extension(matcher))
         .layer(db);
 
@@ -104,7 +105,14 @@ async fn main() {
         .unwrap();
 }
 
-async fn root() -> Html<&'static str> {
+#[cfg(debug_assertions)]
+async fn root() -> impl IntoResponse {
+    tracing::info!("rendering root");
+    Html(std::fs::read_to_string("index.html").expect("could not find index.html"))
+}
+
+#[cfg(not(debug_assertions))]
+async fn root() -> impl IntoResponse {
     tracing::info!("rendering root");
     Html(include_str!("../index.html"))
 }
@@ -183,6 +191,46 @@ fn mk_summary(conn: &Connection, date: String) -> Summary {
         date,
         conf: get_conf_from_db(&conn),
     }
+}
+
+#[derive(Serialize)]
+pub struct CalendarItem {
+    total: f64,
+}
+
+#[derive(Serialize, Default)]
+pub struct CalendarData(HashMap<String, CalendarItem>);
+
+async fn calendar_data(
+    Path(date): Path<String>,
+    Extension(db): Extension<Database>,
+) -> impl IntoResponse {
+    tracing::info!("getting calendar_data: {}", date);
+    if date.len() != 7 || date.chars().nth(4).unwrap() != '-' {
+        return (StatusCode::BAD_REQUEST, Json(Default::default()));
+    }
+    let (year, month) = date.split_once('-').expect("invalid format");
+    let year: i64 = year.parse().expect("year is not integer");
+    let month: i64 = month.parse().expect("month is not integer");
+
+    let conn = db.connection().expect("could not get connection");
+
+    let mut qry = conn.prepare_cached("SELECT date, sum(calories * multiplier) as total FROM items WHERE date BETWEEN ?1 AND ?2 GROUP BY date").expect("could not prepare qry");
+    let mut rows = qry
+        .query(params![date, format!("{}-{:0>2}", year, month + 1)])
+        .expect("could not execute qry");
+
+    let mut data = HashMap::with_capacity(32);
+    while let Ok(Some(row)) = rows.next() {
+        data.insert(
+            row.get_unwrap("date"),
+            CalendarItem {
+                total: row.get_unwrap("total"),
+            },
+        );
+    }
+
+    (StatusCode::OK, Json(CalendarData(data)))
 }
 
 #[derive(Deserialize)]
