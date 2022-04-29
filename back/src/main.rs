@@ -36,6 +36,8 @@ struct Item {
 struct Summary {
     total: f64,
     items: Vec<Item>,
+    date: String,
+    conf: HashMap<String, String>,
 }
 
 impl Default for Summary {
@@ -43,6 +45,8 @@ impl Default for Summary {
         Self {
             total: 0.0,
             items: vec![],
+            date: "".to_string(),
+            conf: Default::default(),
         }
     }
 }
@@ -147,7 +151,7 @@ async fn summary(Extension(db): Extension<Database>) -> impl IntoResponse {
     tracing::info!("getting summary");
     let conn = db.connection().expect("could not get connection");
     let now = Utc::now().with_timezone(&chrono_tz::Europe::Paris);
-    let date = now.date().format("YYYY-MM-DD").to_string();
+    let date = now.date().format("%Y-%m-%d").to_string();
     let summary = mk_summary(&*conn, date);
     (StatusCode::OK, Json(summary))
 }
@@ -176,6 +180,8 @@ fn mk_summary(conn: &Connection, date: String) -> Summary {
     Summary {
         total: items.iter().map(|x| x.calories * x.multiplier).sum(),
         items,
+        date,
+        conf: get_conf_from_db(&conn),
     }
 }
 
@@ -199,9 +205,7 @@ async fn set_conf(
     StatusCode::CREATED
 }
 
-async fn get_conf(Extension(db): Extension<Database>) -> impl IntoResponse {
-    tracing::info!("getting conf");
-    let conn = db.connection().expect("could not get connection");
+fn get_conf_from_db(conn: &Connection) -> HashMap<String, String> {
     let mut qry = conn
         .prepare("SELECT key, value FROM conf;")
         .expect("could not prepare qry");
@@ -211,8 +215,14 @@ async fn get_conf(Extension(db): Extension<Database>) -> impl IntoResponse {
     while let Ok(Some(row)) = rows.next() {
         v.insert(row.get_unwrap("key"), row.get_unwrap("value"));
     }
+    v
+}
 
-    (StatusCode::CREATED, Json(v))
+async fn get_conf(Extension(db): Extension<Database>) -> impl IntoResponse {
+    tracing::info!("getting conf");
+    let conn = db.connection().expect("could not get connection");
+
+    (StatusCode::CREATED, Json(get_conf_from_db(&conn)))
 }
 
 async fn add_item(
@@ -230,7 +240,7 @@ async fn add_item(
             item.name,
             item.calories,
             item.multiplier,
-            now.date().format("YYYY-MM-DD").to_string(),
+            now.date().format("%Y-%m-%d").to_string(),
             now.timestamp()
         ]
                 , |row| {

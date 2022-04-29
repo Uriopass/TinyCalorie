@@ -271,6 +271,7 @@
             }
             return v.json();
         }).then((summary) => {
+            conf = summary.conf;
             let total = Math.round(summary.total);
             let budget_left = Math.round(parseFloat(conf.budget) - total);
             let weight_loss_grams = Math.round((parseFloat(conf.metabolism) - total) / 7.2);
@@ -324,18 +325,6 @@
     }
 
     function init() {
-        fetch("/api/conf", {method: 'get'}).then((v) => {
-            if (!v.ok) {
-                throw 'oh no';
-            }
-            return v.json();
-        }).then((x) => {
-            conf = x;
-            document.getElementById("calories_metabolism").value = conf.metabolism;
-            document.getElementById("calories_budget").value = conf.budget;
-        }).catch(() => {
-        });
-
         document.getElementById("calories_metabolism").oninput = () => {
             updateConf('metabolism', document.getElementById("calories_metabolism").value, renderItems);
         };
