@@ -10,12 +10,12 @@ No frameworks! Very fast.
  - [x] Very simple UI, quick to add/manage food items
  - [x] Mobile support, fully responsive
  - [x] Activities as negative calorie spending
+ - [x] Calendar showing weight loss
+ - [x] Browse history through calendar (and add items if forgotten)
 
 ## Want
 
- - [ ] Front: Calendar showing weight loss
- - [ ] Front: Browse history
- - [ ] Front/back: Edit name of items (content-editable?)
+ - [ ] Edit name of items (content-editable?)
  - [ ] Internationalization (EN translation?)
 
 ## Doesn't want
