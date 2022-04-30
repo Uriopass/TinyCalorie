@@ -56,6 +56,7 @@ struct AddItem {
     name: String,
     calories: f64,
     multiplier: f64,
+    date: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -87,8 +88,7 @@ async fn main() {
         .route("/api/item", post(add_item))
         .route("/api/item/:id", delete(remove_item))
         .route("/api/autocomplete/:qry", get(autocomplete))
-        .route("/api/summary", get(summary))
-        .route("/api/summary/:date", get(summary_date))
+        .route("/api/summary/:date", get(summary))
         .route("/api/calendar_data/:date", get(calendar_data))
         .layer(Extension(matcher))
         .layer(db);
@@ -136,30 +136,27 @@ async fn autocomplete(
     (StatusCode::OK, Json(res))
 }
 
-async fn summary_date(
+fn check_date(date: &str) -> bool {
+    if date.len() != 10 {
+        return false;
+    }
+    let v: Vec<&str> = date.split("-").collect();
+    if v.len() != 3 || v[0].len() != 4 || v[1].len() != 2 || v[2].len() != 2 {
+        return false;
+    }
+    true
+}
+
+async fn summary(
     Path(date): Path<String>,
     Extension(db): Extension<Database>,
 ) -> impl IntoResponse {
     tracing::info!("getting historical summary");
     // YYYY-MM-DD validation
-    if date.len() != 10 {
+    if !check_date(&date) {
         return (StatusCode::BAD_REQUEST, Json(Summary::default()));
     }
-    let v: Vec<&str> = date.split("-").collect();
-    if v.len() != 3 || v[0].len() != 4 || v[1].len() != 2 || v[2].len() != 2 {
-        return (StatusCode::BAD_REQUEST, Json(Summary::default()));
-    }
-
     let conn = db.connection().expect("could not get connection");
-    let summary = mk_summary(&*conn, date);
-    (StatusCode::OK, Json(summary))
-}
-
-async fn summary(Extension(db): Extension<Database>) -> impl IntoResponse {
-    tracing::info!("getting summary");
-    let conn = db.connection().expect("could not get connection");
-    let now = Utc::now().with_timezone(&chrono_tz::Europe::Paris);
-    let date = now.date().format("%Y-%m-%d").to_string();
     let summary = mk_summary(&*conn, date);
     (StatusCode::OK, Json(summary))
 }
@@ -279,8 +276,10 @@ async fn add_item(
     Json(item): Json<AddItem>,
 ) -> impl IntoResponse {
     tracing::info!("adding item {:?}", item);
+    if !check_date(&item.date) {
+        return StatusCode::BAD_REQUEST;
+    }
     let conn = db.connection().expect("could not get connection");
-    let now = Utc::now().with_timezone(&chrono_tz::Europe::Paris);
     let id = conn
         .query_row(
             "INSERT INTO items (name, calories, multiplier, date, timestamp) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id;",
@@ -288,8 +287,8 @@ async fn add_item(
             item.name,
             item.calories,
             item.multiplier,
-            now.date().format("%Y-%m-%d").to_string(),
-            now.timestamp()
+            item.date,
+            Utc::now().timestamp()
         ]
                 , |row| {
                 row.get("id")

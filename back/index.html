@@ -207,6 +207,11 @@
         flex-basis: 14.285%;
         justify-content: center;
         align-items: center;
+        cursor: pointer;
+    }
+
+    .calendar-cell:hover {
+        opacity: 0.5;
     }
 
     .calendar-month-select {
@@ -264,6 +269,7 @@
 </body>
 <script>
     let conf;
+    let summaryDate = new Date();
 
     function renderRound(v) {
         let fract = Math.round(v * 100) % 100;
@@ -286,6 +292,12 @@
         genCalendar();
         enrichCalendar();
     }
+
+    function clickCalendarCell(year, month, day) {
+        summaryDate = new Date(year, month, day+1);
+        renderItems();
+    }
+
     function calendarRight() {
         if (calendarDate.getMonth() === 11) {
             calendarDate.setFullYear(calendarDate.getFullYear()+1, 0);
@@ -296,8 +308,12 @@
         enrichCalendar();
     }
 
+    // date to YYYY-MM-DD
+    function renderDate(year, month, day) {
+        return `${year}-${month < 10 ? `0${month}` : month}-${day < 10 ? `0${day}` : day}`;
+    }
+
     let calendarDate = new Date();
-    let calendarSync = 0;
 
     function genCalendar() {
         let cadiv = document.getElementById("calendar");
@@ -319,17 +335,13 @@
                     </div>`;
         let n_days = new Date(calendarDate.getFullYear(), (calendarDate.getMonth()+1)%12, 0).getDate();
 
-        let monthh = calendarDate.getMonth() + 1;
-        let yearmonth = `${calendarDate.getFullYear()}-${(monthh < 10) ? `0${monthh}` : monthh}`;
-
         for (let i = 0; i < n_days; i++) {
             if (i % 7 === 0) {
                 newhtml += `<div class="calendar-row">`;
             }
 
-            let dayid = i+1;
-            let id = `${yearmonth}-${dayid < 10 ? `0${dayid}` : dayid}`;
-            newhtml += `<div id="${id}" class="calendar-cell">${i + 1}</div>`;
+            let id = renderDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, i+1);
+            newhtml += `<div id="${id}" class="calendar-cell" onclick="clickCalendarCell(${calendarDate.getFullYear()}, ${calendarDate.getMonth()}, ${i})">${i + 1}</div>`;
 
             if (i % 7 === 6 || i === n_days - 1) {
                 if (i === n_days - 1) {
@@ -352,11 +364,16 @@
 
     function renderItem(item) {
         let d = new Date(item.timestamp * 1000);
+
         let formatted = d.toLocaleTimeString(undefined, {
             hour: '2-digit',
             minute: '2-digit',
             hour12: false,
         });
+
+        if (d.getMonth() !== summaryDate.getMonth() || d.getDate() !== summaryDate.getDate()) {
+            formatted = "";
+        }
 
         return `<div class="item">
                     <div class="item-start">
@@ -375,11 +392,8 @@
         return Math.round((parseFloat(conf.metabolism) - total) / 7.2);
     }
 
-    function renderItems(date) {
-        let url = "/api/summary";
-        if (date) {
-            url += date;
-        }
+    function renderItems() {
+        let url = "/api/summary/"+renderDate(summaryDate.getFullYear(), summaryDate.getMonth()+1, summaryDate.getDate());
 
         let itemsDiv = document.getElementById("items");
         return fetch(url, {
@@ -419,7 +433,7 @@
             }
         }).catch((e) => {
             itemsDiv.innerHTML = `<span style="color:red">Internal error: ${e}</span>`;
-        });
+        }).then(enrichCalendar);
     }
 
     let syncval = {};
@@ -506,7 +520,7 @@
             }
         }
         document.getElementById("submit").onclick = onAdd;
-        renderItems().then(enrichCalendar);
+        renderItems();
     }
 
     function enrichCalendar() {
@@ -555,10 +569,12 @@
             return new Promise(resolve => resolve({ok: false}));
         }
 
+        let date = renderDate(summaryDate.getFullYear(), summaryDate.getMonth()+1, summaryDate.getDate());
+
         return fetch(`/api/item`, {
             method: "post",
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name, calories: cal, multiplier: mul}),
+            body: JSON.stringify({name: name, calories: cal, multiplier: mul, date: date}),
         });
     }
 
