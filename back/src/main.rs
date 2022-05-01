@@ -51,7 +51,14 @@ impl Default for Summary {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
+struct EditItem {
+    name: Option<String>,
+    calories: Option<f64>,
+    multiplier: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
 struct AddItem {
     name: String,
     calories: f64,
@@ -86,7 +93,7 @@ async fn main() {
         .route("/icon.ico", get(icon))
         .route("/api/conf", get(get_conf).post(set_conf))
         .route("/api/item", post(add_item))
-        .route("/api/item/:id", delete(remove_item))
+        .route("/api/item/:id", delete(remove_item).put(edit_item))
         .route("/api/autocomplete/:qry", get(autocomplete))
         .route("/api/summary/:date", get(summary))
         .route("/api/calendar_data/:date", get(calendar_data))
@@ -270,10 +277,35 @@ async fn get_conf(Extension(db): Extension<Database>) -> impl IntoResponse {
     (StatusCode::CREATED, Json(get_conf_from_db(&conn)))
 }
 
-async fn add_item(
+async fn edit_item(
+    Path(id): Path<u64>,
+    Json(item): Json<EditItem>,
     Extension(db): Extension<Database>,
     Extension(search): Extension<Searcher>,
+) -> impl IntoResponse {
+    tracing::info!("editing item {:?}", item);
+    let conn = db.connection().expect("could not get connection");
+    let n_updated = conn
+        .execute(
+            "UPDATE items SET name = COALESCE(?1, name), calories = COALESCE(?2, calories), multiplier = COALESCE(?3, multiplier) WHERE id = ?4;",
+            params![
+            item.name,
+            item.calories,
+            item.multiplier,
+            id,
+        ])
+        .expect("could not execute update item qry");
+    if n_updated == 0 {
+        return StatusCode::NOT_FOUND;
+    }
+    search.update(id, item.name, item.calories);
+    StatusCode::OK
+}
+
+async fn add_item(
     Json(item): Json<AddItem>,
+    Extension(db): Extension<Database>,
+    Extension(search): Extension<Searcher>,
 ) -> impl IntoResponse {
     tracing::info!("adding item {:?}", item);
     if !check_date(&item.date) {

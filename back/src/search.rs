@@ -48,6 +48,22 @@ impl Searcher {
         }))
     }
 
+    pub fn update(&self, id: u64, name: Option<String>, calories: Option<f64>) {
+        self.0
+            .items
+            .write()
+            .expect("could not lock write")
+            .get_mut(&id)
+            .map(move |x| {
+                if let Some(name) = name {
+                    x.name = name;
+                }
+                if let Some(calories) = calories {
+                    x.calories = calories;
+                }
+            });
+    }
+
     pub fn insert(&self, id: u64, item: SearchItem) {
         self.0
             .items
