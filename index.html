@@ -318,11 +318,11 @@
     function genCalendar() {
         let cadiv = document.getElementById("calendar");
 
-        let year = calendarDate.toLocaleDateString('FR', {
+        let year = calendarDate.toLocaleDateString('EN', {
             year: "numeric",
         });
 
-        let month = calendarDate.toLocaleDateString('FR', {
+        let month = calendarDate.toLocaleDateString('EN', {
             month: "long",
         });
         month = month.charAt(0).toUpperCase() + month.slice(1);
