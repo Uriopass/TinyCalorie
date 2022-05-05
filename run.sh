@@ -1,2 +1,2 @@
 #!/bin/sh
-./calorie-daemon
+PORT=3001 ./calorie-daemon

@@ -103,7 +103,7 @@ async fn main() {
     let port = std::env::var("PORT")
         .ok()
         .and_then(|x| x.parse().ok())
-        .unwrap_or(3001);
+        .unwrap_or(80);
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     tracing::info!("listening on {}", addr);
     axum::Server::bind(&addr)
