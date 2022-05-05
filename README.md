@@ -16,7 +16,7 @@ No frameworks! Very fast.
 ## Want
 
  - [ ] Edit name of items (content-editable?)
- - [ ] Internationalization (EN translation?)
+ - [ ] Internationalization
 
 ## Doesn't want
 
