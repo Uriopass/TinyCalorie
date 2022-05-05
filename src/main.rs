@@ -74,7 +74,19 @@ struct RemoveItem {
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
-    let db = Database::new("db.db").expect("could not open db");
+
+    let mut path = "db.db";
+    if std::fs::metadata(path)
+        .map(|x| !x.is_file())
+        .unwrap_or(true)
+        && std::fs::metadata("storage")
+            .map(|x| x.is_dir())
+            .unwrap_or(false)
+    {
+        tracing::info!("no db file found but a storage directory, going to put the db there.");
+        path = "storage/db.db";
+    }
+    let db = Database::new(path).expect("could not open db");
 
     tracing::info!(
         "sqlite version: {}",
@@ -104,7 +116,7 @@ async fn main() {
         .ok()
         .and_then(|x| x.parse().ok())
         .unwrap_or(80);
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("listening on {}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
@@ -322,9 +334,9 @@ async fn add_item(
             item.date,
             Utc::now().timestamp()
         ]
-                , |row| {
+            , |row| {
                 row.get("id")
-            }
+            },
         )
         .expect("could not prepare qry");
     search.insert(
