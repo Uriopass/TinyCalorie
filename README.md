@@ -1,4 +1,5 @@
-# calorie
+# TinyCalorie
+
 Simplest possible calorie counter, as a web-app. Rust (back) + HTML/CSS/vanillajs (front).  
 No frameworks! Very fast.
 
@@ -8,8 +9,8 @@ You can use the provided dockerfile for easier deployment.
 This will expose it on port 8080, and store the SQLite db.db in /path/to/storage.
 
 ```bash
-docker build -t calorie .
-docker run -p 8080:80 -v /path/to/storage:/storage calorie
+docker build -t tinycalorie .
+docker run -p 8080:80 -v /path/to/storage:/storage tinycalorie
 ```
 
 ## Features
