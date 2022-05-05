@@ -487,6 +487,9 @@
         }
 
         let onInput = async (text) => {
+	    if (!text) {
+                 return [[], [], []];
+	    }
             let res = await (await fetch(encodeURI("/api/autocomplete/" + text), {method: 'get'})).json();
 
             let texts = [];
@@ -583,9 +586,6 @@
         let syncId = 0;
         inp.addEventListener("input", function () {
             let a, b, i, val = this.value;
-            if (!val) {
-                return false;
-            }
             syncId += 1;
             let syncCpy = syncId;
             onInput(val).then((res) => {
