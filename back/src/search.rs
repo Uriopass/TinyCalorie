@@ -95,7 +95,7 @@ impl Searcher {
             let (score, pos) = res.unwrap();
             results.push((score, id, pos));
         }
-        results.sort_unstable_by_key(|(score, id, _)| (*score, !*id));
+        results.sort_unstable_by_key(|(score, id, _)| (-*score, !*id));
         results
             .into_iter()
             .take(5)
