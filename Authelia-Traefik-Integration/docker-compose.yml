@@ -1,0 +1,27 @@
+version: "3.1"
+
+services:
+  tiny-calorie:
+    image: dnshra/tinycalorie:1.0
+    container_name: tiny-calorie
+    volumes: 
+      - /path/to/storage:/app/data
+    networks:
+      - network
+    expose: 
+      - 80
+    restart: unless-stopped
+    labels:
+      # Authelia-Traefik Config
+      - "traefik.enable=true"
+      - 'traefik.http.routers.tinycalorie.tls=true'
+      - "traefik.http.routers.tinycalorie.rule=Host(`domain.TLD`)"
+      - "traefik.http.routers.tinycalorie.entrypoints=websecure"
+      - "traefik.http.routers.tinycalorie.service=tinycalorie"
+      - "traefik.http.services.tinycalorie.loadbalancer.server.port=80"
+      - "traefik.http.routers.tinycalorie.tls.certresolver=leresolver"
+      - 'traefik.http.routers.tinycalorie.middlewares=authelia@docker'
+
+networks:
+  network:
+    external: true
