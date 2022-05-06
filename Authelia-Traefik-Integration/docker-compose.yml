@@ -2,7 +2,7 @@ version: "3.1"
 
 services:
   tiny-calorie:
-    image: dnshra/tinycalorie:1.0
+    image: uriopass/tinycalorie:1.0
     container_name: tiny-calorie
     volumes: 
       - /path/to/storage:/storage

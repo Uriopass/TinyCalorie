@@ -15,9 +15,9 @@ docker run -p 8080:80 -v /path/to/storage:/storage tinycalorie
 ## Dockerfile on Dockerhub
 
 ### Use the prebuild image on Dockerhub
-[Docker Hub Image](https://hub.docker.com/r/dnshra/tinycalorie)
+[Docker Hub Image](https://hub.docker.com/r/uriopass/tinycalorie)
 ```bash
-docker pull dnshra/tinycalorie:1.0
+docker pull uriopass/tinycalorie:1.0
 ```
 ## Use Docker-Compose File
 1. Install Docker and Docker-Compose
@@ -31,7 +31,7 @@ version: "3.1"
 
 services:
   tiny-calorie:
-    image: dnshra/tinycalorie:1.0
+    image: uriopass/tinycalorie:1.0
     container_name: tiny-calorie
     volumes: 
       - /path/to/storage:/storage
