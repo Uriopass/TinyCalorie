@@ -51,7 +51,7 @@ networks:
 3. run docker-compose up -d
 
 [Learn about Authelia](https://www.authelia.com/)
-[Learn about Traefik](hhttps://traefik.io/)
+[Learn about Traefik](https://traefik.io/)
 
 ```
 version: "3.1"
