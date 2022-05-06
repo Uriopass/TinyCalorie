@@ -34,7 +34,7 @@ services:
     image: dnshra/tinycalorie:1.0
     container_name: tiny-calorie
     volumes: 
-      - /path/to/storage:/app/data
+      - /path/to/storage:/storage
     networks:
       - network
     ports: 
@@ -61,7 +61,7 @@ services:
     image: dnshra/tinycalorie:1.0
     container_name: tiny-calorie
     volumes: 
-      - /path/to/storage:/app/data
+      - /path/to/storage:/storage
     networks:
       - network
     expose: 
