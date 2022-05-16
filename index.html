@@ -334,28 +334,35 @@
                         <button onclick="calendarRight()">&gt;</button>
                     </div>`;
         let n_days = new Date(calendarDate.getFullYear(), (calendarDate.getMonth()+1)%12, 0).getDate();
-
+        let dow = (new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay()+6)%7;
+        if (dow > 0) {
+            newhtml += `<div class="calendar-row">`;
+            for (let i = 0; i < dow; i++) {
+                newhtml += `<div class="calendar-cell"></div>`;
+            }
+        }
         for (let i = 0; i < n_days; i++) {
-            if (i % 7 === 0) {
+            let idow = (i+dow)%7;
+            if (idow % 7 === 0) {
                 newhtml += `<div class="calendar-row">`;
             }
 
             let id = renderDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, i+1);
             newhtml += `<div id="${id}" class="calendar-cell" onclick="clickCalendarCell(${calendarDate.getFullYear()}, ${calendarDate.getMonth()}, ${i})">${i + 1}</div>`;
 
-            if (i % 7 === 6 || i === n_days - 1) {
-                if (i === n_days - 1) {
-                    if (n_days % 7 > 0) {
-                        for (let i = 0; i < 7 - n_days % 7; i++) {
-                            newhtml += `<div class="calendar-cell"></div>`;
-                        }
-                    }
+            if (i === n_days - 1) {
+                for (let i = 0; i < 5 - idow; i++) {
+                    newhtml += `<div class="calendar-cell"></div>`;
                 }
+                newhtml += `</div>`;
+                break;
+            }
+            if (idow === 6) {
                 newhtml += `</div>`;
             }
         }
 
-        if(n_days % 7 === 0) {
+        if((n_days + dow) / 7 <= 5) {
             newhtml += `<div class="calendar-row"><div class="calendar-cell">&nbsp;</div></div>`;
         }
 
