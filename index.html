@@ -454,7 +454,7 @@
         fetch("/api/conf", {
             method: 'post',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({key: 'metabolism', value: value})
+            body: JSON.stringify({key: key, value: value})
         }).then((v) => {
             if (!v.ok) {
                 return;
