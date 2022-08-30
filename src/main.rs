@@ -52,6 +52,12 @@ impl Default for Summary {
 }
 
 #[derive(Debug, Deserialize)]
+struct AddWeight {
+    date: String,
+    weight: f64,
+}
+
+#[derive(Debug, Deserialize)]
 struct EditItem {
     name: Option<String>,
     calories: Option<f64>,
@@ -104,6 +110,7 @@ async fn main() {
         .route("/", get(root))
         .route("/icon.ico", get(icon))
         .route("/api/conf", get(get_conf).post(set_conf))
+        .route("/api/weight", post(add_weight))
         .route("/api/item", post(add_item))
         .route("/api/item/:id", delete(remove_item).put(edit_item))
         .route("/api/autocomplete/:qry", get(autocomplete))
@@ -287,6 +294,21 @@ async fn get_conf(Extension(db): Extension<Database>) -> impl IntoResponse {
     let conn = db.connection().expect("could not get connection");
 
     (StatusCode::CREATED, Json(get_conf_from_db(&conn)))
+}
+
+async fn add_weight(
+    Json(weight): Json<AddWeight>,
+    Extension(db): Extension<Database>,
+) -> impl IntoResponse {
+    tracing::info!("adding weight {:?}", &weight);
+    let conn = db.connection().expect("could not get connection");
+    conn.execute(
+        "INSERT INTO weight (date, weight) VALUES (?1, ?2) 
+        ON CONFLICT (date) DO UPDATE SET weight=?2;",
+        params![weight.date, weight.weight],
+    )
+    .expect("could not insert weight into db");
+    StatusCode::OK
 }
 
 async fn edit_item(
