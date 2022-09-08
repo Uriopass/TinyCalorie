@@ -7,6 +7,7 @@
     <meta name="theme-color" content="#000000"/>
     <meta name="description" content="Tiny Calorie counter"/>
     <title>Tiny Calorie</title>
+    <link href="/uplot.css" rel="stylesheet"/>
 </head>
 </html>
 <style>
@@ -272,6 +273,9 @@
     <div id="items">
     </div>
     <div id="calendar">
+    </div>
+    <div id="weightplot">
+
     </div>
     <div id="conf">
         <div class="conf-content">
@@ -740,4 +744,38 @@
     }
 
     init();
+</script>
+<script src="/uplot.js"></script>
+<script>
+fetch("/api/weight_history/2000-01-01").then((v) => {
+   return v.json();
+}).then((v) => {
+    let data = v.weights;
+
+    const opts = {
+        title: "Weight History",
+        id: "weightplot",
+        width: 500,
+        height: 300,
+        series: [
+            {},
+            {
+                stroke: '#FF0000',
+                width: 3,
+                label: 'weight',
+            },
+        ],
+    };
+
+    let xs = [];
+    let ys = [];
+    for (let w of data) {
+        let d = new Date(w[0]);
+
+        xs.push(d.getTime() / 1000);
+        ys.push(w[1]);
+    }
+
+    new uPlot(opts, [xs, ys], document.getElementById("weightplot"));
+});
 </script>

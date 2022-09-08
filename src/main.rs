@@ -114,6 +114,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/", get(root))
+        .route("/uplot.js", get(uplotjs))
+        .route("/uplot.css", get(uplotcss))
         .route("/icon.ico", get(icon))
         .route("/api/conf", get(get_conf).post(set_conf))
         .route("/api/weight", post(add_weight))
@@ -148,6 +150,16 @@ async fn root() -> impl IntoResponse {
 async fn root() -> impl IntoResponse {
     tracing::info!("rendering root");
     Html(include_str!("../index.html"))
+}
+
+async fn uplotjs() -> impl IntoResponse {
+    tracing::info!("rendering uplot.js");
+    Html(include_str!("../uplot.js"))
+}
+
+async fn uplotcss() -> impl IntoResponse {
+    tracing::info!("rendering uplot.css");
+    ([("Content-Type", "text/css")], include_str!("../uplot.css"))
 }
 
 const ICON_FILE: &[u8] = include_bytes!("../icon.ico");
