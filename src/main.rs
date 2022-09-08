@@ -32,6 +32,12 @@ struct Item {
     timestamp: u64,
 }
 
+#[derive(Serialize, Default)]
+struct WeightHistory {
+    /// Contains the weights of the last X days
+    weights: Vec<(String, f64)>,
+}
+
 #[derive(Serialize)]
 struct Summary {
     total: f64,
@@ -111,6 +117,7 @@ async fn main() {
         .route("/icon.ico", get(icon))
         .route("/api/conf", get(get_conf).post(set_conf))
         .route("/api/weight", post(add_weight))
+        .route("/api/weight_history/:after_date", get(weight_history))
         .route("/api/item", post(add_item))
         .route("/api/item/:id", delete(remove_item).put(edit_item))
         .route("/api/autocomplete/:qry", get(autocomplete))
@@ -187,6 +194,33 @@ async fn summary(
     (StatusCode::OK, Json(summary))
 }
 
+async fn weight_history(
+    Path(after_date): Path<String>,
+    Extension(db): Extension<Database>,
+) -> impl IntoResponse {
+    tracing::info!("getting weight history after {}", after_date);
+    let after_date = parse_date(&after_date);
+    if after_date.is_none() {
+        return (StatusCode::BAD_REQUEST, Json(WeightHistory::default()));
+    }
+    let after_date = after_date.unwrap();
+    let conn = db.connection().expect("could not get connection");
+    let mut stmt = conn
+        .prepare("select date, weight from weight where date >= ? order by date")
+        .expect("could not prepare statement");
+    let mut rows = stmt
+        .query_map(&[&after_date.to_year_month_day()], |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .expect("could not query");
+    let mut weights = vec![];
+    while let Some(row) = rows.next() {
+        let (date, weight): (String, f64) = row.expect("could not get row");
+        weights.push((date, weight));
+    }
+    (StatusCode::OK, Json(WeightHistory { weights }))
+}
+
 fn mk_summary(conn: &Connection, date: String) -> Summary {
     let mut qry = conn
         .prepare_cached(
@@ -224,23 +258,63 @@ pub struct CalendarItem {
 #[derive(Serialize, Default)]
 pub struct CalendarData(HashMap<String, CalendarItem>);
 
+struct Date {
+    year: u32,
+    month: u32,
+    day: u32,
+}
+
+/// date is encoded as YYYY-MM-DD or YYYY-MM
+fn parse_date(date: &str) -> Option<Date> {
+    let v: Vec<&str> = date.split("-").collect();
+    let year = v[0].parse().ok()?;
+    if year < 1000 || year > 9999 {
+        return None;
+    }
+    let month = v[1].parse().ok()?;
+    if month < 1 || month > 12 {
+        return None;
+    }
+    let day = if v.len() == 3 { v[2].parse().ok()? } else { 1 };
+    if day < 1 || day > 31 {
+        return None;
+    }
+    Some(Date { year, month, day })
+}
+
+impl Date {
+    fn to_year_month(&self) -> String {
+        format!("{:04}-{:02}", self.year, self.month)
+    }
+
+    fn to_year_month_day(&self) -> String {
+        format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
+    }
+}
+
 async fn calendar_data(
     Path(date): Path<String>,
     Extension(db): Extension<Database>,
 ) -> impl IntoResponse {
     tracing::info!("getting calendar_data: {}", date);
-    if date.len() != 7 || date.chars().nth(4).unwrap() != '-' {
+    let d = parse_date(&date);
+    if d.is_none() {
         return (StatusCode::BAD_REQUEST, Json(Default::default()));
     }
-    let (year, month) = date.split_once('-').expect("invalid format");
-    let year: i64 = year.parse().expect("year is not integer");
-    let month: i64 = month.parse().expect("month is not integer");
-
+    let d = d.unwrap();
     let conn = db.connection().expect("could not get connection");
 
     let mut qry = conn.prepare_cached("SELECT date, sum(calories * multiplier) as total FROM items WHERE date BETWEEN ?1 AND ?2 GROUP BY date").expect("could not prepare qry");
     let mut rows = qry
-        .query(params![date, format!("{}-{:0>2}", year, month + 1)])
+        .query(params![
+            d.to_year_month(),
+            Date {
+                year: d.year,
+                month: d.month + 1,
+                day: 1
+            }
+            .to_year_month()
+        ])
         .expect("could not execute qry");
 
     let mut data = HashMap::with_capacity(32);
@@ -384,4 +458,61 @@ async fn remove_item(
     }
     search.remove(id);
     StatusCode::CREATED
+}
+
+#[cfg(test)]
+mod tests_date {
+    use super::Date;
+    #[test]
+    fn test_to_year_month() {
+        assert_eq!(
+            Date {
+                year: 2021,
+                month: 1,
+                day: 1
+            }
+            .to_year_month(),
+            "2021-01"
+        );
+        assert_eq!(
+            Date {
+                year: 2021,
+                month: 12,
+                day: 1
+            }
+            .to_year_month(),
+            "2021-12"
+        );
+    }
+
+    #[test]
+    fn test_to_year_month_day() {
+        assert_eq!(
+            Date {
+                year: 2021,
+                month: 1,
+                day: 1
+            }
+            .to_year_month_day(),
+            "2021-01-01"
+        );
+        assert_eq!(
+            Date {
+                year: 2021,
+                month: 12,
+                day: 1
+            }
+            .to_year_month_day(),
+            "2021-12-01"
+        );
+        assert_eq!(
+            Date {
+                year: 2021,
+                month: 1,
+                day: 31
+            }
+            .to_year_month_day(),
+            "2021-01-31"
+        );
+    }
 }
