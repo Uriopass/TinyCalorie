@@ -15,7 +15,7 @@ use axum::{
 use chrono::Utc;
 use db::Database;
 use include_dir::{include_dir, Dir};
-use r2d2_sqlite::rusqlite::{params, Connection};
+use r2d2_sqlite::rusqlite::{params, Connection, Error};
 use search::Searcher;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -44,6 +44,7 @@ struct Summary {
     items: Vec<Item>,
     date: String,
     conf: HashMap<String, String>,
+    weight: Option<f64>,
 }
 
 impl Default for Summary {
@@ -53,6 +54,7 @@ impl Default for Summary {
             items: vec![],
             date: "".to_string(),
             conf: Default::default(),
+            weight: None,
         }
     }
 }
@@ -254,11 +256,21 @@ fn mk_summary(conn: &Connection, date: String) -> Summary {
 
     items.sort_by_key(|x| x.timestamp);
 
+    let mut qry_weight = conn
+        .prepare_cached("SELECT weight FROM weight WHERE date = ?1")
+        .expect("could not prepare qry_weight");
+    let weight: Option<f64> = match qry_weight.query_row(&[&date], |row| row.get(0)) {
+        Ok(x) => Some(x),
+        Err(Error::QueryReturnedNoRows) => None,
+        Err(_) => panic!("could not get weight for the day"),
+    };
+
     Summary {
         total: items.iter().map(|x| x.calories * x.multiplier).sum(),
         items,
         date,
         conf: get_conf_from_db(&conn),
+        weight,
     }
 }
 

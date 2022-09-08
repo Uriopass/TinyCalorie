@@ -439,6 +439,9 @@
             conf = summary.conf;
             document.getElementById("calories_budget").value = conf.budget;
             document.getElementById("calories_metabolism").value = conf.metabolism;
+            if(summary.weight) {
+                document.getElementById("weight_input").value = summary.weight;
+            }
 
             let total = Math.round(summary.total);
             let budget_left = Math.round(parseFloat(conf.budget) - total);
