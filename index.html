@@ -48,6 +48,7 @@
         border-radius: 3px;
         padding: 10px 30px;
         display: flex;
+        flex-direction: column;
         flex-wrap: wrap;
         align-items: center;
         justify-content: center;
@@ -266,7 +267,6 @@
             </div>
             <div id="weight">
                 <input id="weight_input" autocomplete="false" type="number" placeholder="Weight"/>
-                <button id="weight_submit">OK</button>
             </div>
         </div>
     </div>
@@ -521,13 +521,7 @@
             if (!document.getElementById("weight_input").value) {
                 return
             }
-            addWeight(document.getElementById("weight_input").value).then((res) => {
-                if (!res.ok) {
-                    return;
-                }
-                renderItems();
-            });
-            document.getElementById("weight_input").value = "";
+            addWeight(document.getElementById("weight_input").value);
         };
 
 
@@ -568,12 +562,7 @@
             }
         };
         document.getElementById("submit").onclick = onAdd;
-        document.getElementById("weight_submit").onclick = onWeightAdd;
-        document.getElementById("weight_input").onkeydown = (e) => {
-            if (e.key === "Enter" && document.getElementById("weight_input").value) {
-                onWeightAdd();
-            }
-        };
+        document.getElementById("weight_input").oninput = onWeightAdd;
         renderItems();
     }
 
@@ -771,7 +760,6 @@ fetch("/api/weight_history/2000-01-01").then((v) => {
     let ys = [];
     for (let w of data) {
         let d = new Date(w[0]);
-
         xs.push(d.getTime() / 1000);
         ys.push(w[1]);
     }
