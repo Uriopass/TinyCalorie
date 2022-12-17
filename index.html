@@ -33,6 +33,7 @@
         justify-content: center;
         align-items: center;
         flex-flow: row;
+        flex-wrap: wrap;
     }
 
     #weight {
@@ -46,7 +47,7 @@
         margin-top: 10px;
         border: 1px solid #d0d0d0;
         border-radius: 3px;
-        padding: 10px 30px;
+        padding: 10px 20px;
         display: flex;
         flex-direction: column;
         flex-wrap: wrap;
@@ -272,10 +273,10 @@
     </div>
     <div id="items">
     </div>
-    <div id="calendar">
-    </div>
     <div id="weightplot">
 
+    </div>
+    <div id="calendar">
     </div>
     <div id="conf">
         <div class="conf-content">
@@ -747,7 +748,7 @@ fetch("/api/weight_history/2000-01-01").then((v) => {
     const opts = {
         title: "Weight History",
         id: "weightplot",
-        width: 500,
+        width: Math.min(window.innerWidth, 500),
         height: 300,
         series: [
             {},
