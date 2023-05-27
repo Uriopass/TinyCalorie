@@ -483,7 +483,10 @@
             }
         }).catch((e) => {
             itemsDiv.innerHTML = `<span style="color:red">Internal error: ${e}</span>`;
-        }).then(genCalendar).then(enrichCalendar);
+        }).then(() => {
+            genCalendar();
+            enrichCalendar();
+        });
     }
 
     let syncval = {};
