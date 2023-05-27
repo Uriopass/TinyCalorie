@@ -242,6 +242,10 @@
         margin-right: 10px;
     }
 
+    .today {
+        box-shadow: 0 0 2px 0 #da7ad5 inset;
+    }
+
     .item-delete {
         color: red;
         cursor: pointer;
@@ -366,6 +370,8 @@
                 newhtml += `<div class="calendar-cell"></div>`;
             }
         }
+        let curDayOfMonth = calendarDate.getDate();
+
         for (let i = 0; i < n_days; i++) {
             let idow = (i+dow)%7;
             if (idow % 7 === 0) {
@@ -373,7 +379,8 @@
             }
 
             let id = renderDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, i+1);
-            newhtml += `<div id="${id}" class="calendar-cell" onclick="clickCalendarCell(${calendarDate.getFullYear()}, ${calendarDate.getMonth()}, ${i})">${i + 1}</div>`;
+
+            newhtml += `<div id="${id}" class="calendar-cell ${curDayOfMonth === (i+1) ? "today":""}" onclick="clickCalendarCell(${calendarDate.getFullYear()}, ${calendarDate.getMonth()}, ${i})">${i + 1}</div>`;
 
             if (i === n_days - 1) {
                 for (let i = 0; i < 5 - idow; i++) {
