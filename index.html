@@ -242,8 +242,12 @@
         margin-right: 10px;
     }
 
+    .summaryday {
+        box-shadow: 0 0 3px 0 #1b3ebb inset;
+    }
+
     .today {
-        box-shadow: 0 0 2px 0 #da7ad5 inset;
+        box-shadow: 0 0 2px 0 #bb6b1b inset;
     }
 
     .item-delete {
@@ -314,7 +318,7 @@
 
     function calendarLeft() {
         if (calendarDate.getMonth() === 0) {
-            calendarDate.setFullYear(calendarDate.getFullYear()-1, 11);
+            calendarDate.setFullYear(calendarDate.getFullYear() - 1, 11);
         } else {
             calendarDate.setMonth(calendarDate.getMonth() - 1);
         }
@@ -323,13 +327,13 @@
     }
 
     function clickCalendarCell(year, month, day) {
-        summaryDate = new Date(year, month, day+1);
+        summaryDate = new Date(year, month, day + 1);
         renderItems();
     }
 
     function calendarRight() {
         if (calendarDate.getMonth() === 11) {
-            calendarDate.setFullYear(calendarDate.getFullYear()+1, 0);
+            calendarDate.setFullYear(calendarDate.getFullYear() + 1, 0);
         } else {
             calendarDate.setMonth(calendarDate.getMonth() + 1);
         }
@@ -343,6 +347,7 @@
     }
 
     let calendarDate = new Date();
+    let todayDate = new Date();
 
     function genCalendar() {
         let cadiv = document.getElementById("calendar");
@@ -362,25 +367,26 @@
                         ${month} ${year}
                         <button onclick="calendarRight()">&gt;</button>
                     </div>`;
-        let n_days = new Date(calendarDate.getFullYear(), (calendarDate.getMonth()+1)%12, 0).getDate();
-        let dow = (new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay()+6)%7;
+        let n_days = new Date(calendarDate.getFullYear(), (calendarDate.getMonth() + 1) % 12, 0).getDate();
+        let dow = (new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay() + 6) % 7;
         if (dow > 0) {
             newhtml += `<div class="calendar-row">`;
             for (let i = 0; i < dow; i++) {
                 newhtml += `<div class="calendar-cell"></div>`;
             }
         }
-        let curDayOfMonth = calendarDate.getDate();
+        let summaryDayOfMonth = summaryDate.getDate();
+        let todayDayOfMonth = todayDate.getDate();
 
         for (let i = 0; i < n_days; i++) {
-            let idow = (i+dow)%7;
+            let idow = (i + dow) % 7;
             if (idow % 7 === 0) {
                 newhtml += `<div class="calendar-row">`;
             }
 
-            let id = renderDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, i+1);
+            let id = renderDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, i + 1);
 
-            newhtml += `<div id="${id}" class="calendar-cell ${curDayOfMonth === (i+1) ? "today":""}" onclick="clickCalendarCell(${calendarDate.getFullYear()}, ${calendarDate.getMonth()}, ${i})">${i + 1}</div>`;
+            newhtml += `<div id="${id}" class="calendar-cell ${summaryDayOfMonth === (i + 1) ? "summaryday" : (todayDayOfMonth === (i+1) ? "today": "")}" onclick="clickCalendarCell(${calendarDate.getFullYear()}, ${calendarDate.getMonth()}, ${i})">${i + 1}</div>`;
 
             if (i === n_days - 1) {
                 for (let i = 0; i < 5 - idow; i++) {
@@ -394,7 +400,7 @@
             }
         }
 
-        if((n_days + dow) / 7 <= 5) {
+        if ((n_days + dow) / 7 <= 5) {
             newhtml += `<div class="calendar-row"><div class="calendar-cell">&nbsp;</div></div>`;
         }
 
@@ -432,7 +438,7 @@
     }
 
     function renderItems() {
-        let url = "/api/summary/"+renderDate(summaryDate.getFullYear(), summaryDate.getMonth()+1, summaryDate.getDate());
+        let url = "/api/summary/" + renderDate(summaryDate.getFullYear(), summaryDate.getMonth() + 1, summaryDate.getDate());
 
         let itemsDiv = document.getElementById("items");
         return fetch(url, {
@@ -447,8 +453,10 @@
             conf = summary.conf;
             document.getElementById("calories_budget").value = conf.budget;
             document.getElementById("calories_metabolism").value = conf.metabolism;
-            if(summary.weight) {
+            if (summary.weight) {
                 document.getElementById("weight_input").value = summary.weight;
+            } else {
+                document.getElementById("weight_input").value = "";
             }
 
             let total = Math.round(summary.total);
@@ -475,7 +483,7 @@
             }
         }).catch((e) => {
             itemsDiv.innerHTML = `<span style="color:red">Internal error: ${e}</span>`;
-        }).then(enrichCalendar);
+        }).then(genCalendar).then(enrichCalendar);
     }
 
     let syncval = {};
@@ -537,9 +545,9 @@
 
 
         let onInput = async (text) => {
-	    if (!text) {
-                 return [[], [], []];
-	    }
+            if (!text) {
+                return [[], [], []];
+            }
             let res = await (await fetch(encodeURI("/api/autocomplete/" + text), {method: 'get'})).json();
 
             let texts = [];
@@ -580,8 +588,8 @@
     function enrichCalendar() {
         let monthh = calendarDate.getMonth() + 1;
         let yearmonth = `${calendarDate.getFullYear()}-${(monthh < 10) ? `0${monthh}` : monthh}`;
-        fetch('/api/calendar_data/'+yearmonth, {method: 'get'}).then((v) => {
-            if(!v.ok) {
+        fetch('/api/calendar_data/' + yearmonth, {method: 'get'}).then((v) => {
+            if (!v.ok) {
                 throw 'notok';
             }
             return v.json();
@@ -600,7 +608,9 @@
                     datediv.style.backgroundColor = `hsl(0,90%,${95 - saturation / 4}%)`;
                 }
             }
-        }).catch((e) => {console.log(e)})
+        }).catch((e) => {
+            console.log(e)
+        })
     }
 
     function deleteItem(id) {
@@ -623,7 +633,7 @@
             return new Promise(resolve => resolve({ok: false}));
         }
 
-        let date = renderDate(summaryDate.getFullYear(), summaryDate.getMonth()+1, summaryDate.getDate());
+        let date = renderDate(summaryDate.getFullYear(), summaryDate.getMonth() + 1, summaryDate.getDate());
 
         return fetch(`/api/item`, {
             method: "post",
@@ -638,7 +648,7 @@
             return new Promise(resolve => resolve({ok: false}));
         }
 
-        let date = renderDate(summaryDate.getFullYear(), summaryDate.getMonth()+1, summaryDate.getDate());
+        let date = renderDate(summaryDate.getFullYear(), summaryDate.getMonth() + 1, summaryDate.getDate());
 
         return fetch(`/api/weight`, {
             method: "post",
@@ -747,34 +757,34 @@
 </script>
 <script src="/uplot.js"></script>
 <script>
-fetch("/api/weight_history/2000-01-01").then((v) => {
-   return v.json();
-}).then((v) => {
-    let data = v.weights;
+    fetch("/api/weight_history/2000-01-01").then((v) => {
+        return v.json();
+    }).then((v) => {
+        let data = v.weights;
 
-    const opts = {
-        title: "Weight History",
-        id: "weightplot",
-        width: Math.min(window.innerWidth, 500),
-        height: 300,
-        series: [
-            {},
-            {
-                stroke: '#FF0000',
-                width: 3,
-                label: 'weight',
-            },
-        ],
-    };
+        const opts = {
+            title: "Weight History",
+            id: "weightplot",
+            width: Math.min(window.innerWidth, 500),
+            height: 300,
+            series: [
+                {},
+                {
+                    stroke: '#FF0000',
+                    width: 3,
+                    label: 'weight',
+                },
+            ],
+        };
 
-    let xs = [];
-    let ys = [];
-    for (let w of data) {
-        let d = new Date(w[0]);
-        xs.push(d.getTime() / 1000);
-        ys.push(w[1]);
-    }
+        let xs = [];
+        let ys = [];
+        for (let w of data) {
+            let d = new Date(w[0]);
+            xs.push(d.getTime() / 1000);
+            ys.push(w[1]);
+        }
 
-    new uPlot(opts, [xs, ys], document.getElementById("weightplot"));
-});
+        new uPlot(opts, [xs, ys], document.getElementById("weightplot"));
+    });
 </script>
