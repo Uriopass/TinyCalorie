@@ -785,6 +785,7 @@
                 ys.push(w[1]);
             }
 
+            document.getElementById("weightplot").innerHTML = "";
             new uPlot(opts, [xs, ys], document.getElementById("weightplot"));
         })
     }
