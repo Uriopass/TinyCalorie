@@ -657,7 +657,7 @@
             method: "post",
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({weight: w, date: date}),
-        });
+        }).then(updateWeightHistory);
     }
 
     function autocomplete(inp, onInput, onSubmit, onSubmitEmpty) {
@@ -756,38 +756,43 @@
         });
     }
 
+    function updateWeightHistory() {
+        return fetch("/api/weight_history/2000-01-01").then((v) => {
+            return v.json();
+        }).then((v) => {
+            let data = v.weights;
+
+            const opts = {
+                title: "Weight History",
+                id: "weightplot",
+                width: Math.min(window.innerWidth, 500),
+                height: 300,
+                series: [
+                    {},
+                    {
+                        stroke: '#FF0000',
+                        width: 3,
+                        label: 'weight',
+                    },
+                ],
+            };
+
+            let xs = [];
+            let ys = [];
+            for (let w of data) {
+                let d = new Date(w[0]);
+                xs.push(d.getTime() / 1000);
+                ys.push(w[1]);
+            }
+
+            new uPlot(opts, [xs, ys], document.getElementById("weightplot"));
+        })
+    }
+
     init();
 </script>
 <script src="/uplot.js"></script>
 <script>
-    fetch("/api/weight_history/2000-01-01").then((v) => {
-        return v.json();
-    }).then((v) => {
-        let data = v.weights;
-
-        const opts = {
-            title: "Weight History",
-            id: "weightplot",
-            width: Math.min(window.innerWidth, 500),
-            height: 300,
-            series: [
-                {},
-                {
-                    stroke: '#FF0000',
-                    width: 3,
-                    label: 'weight',
-                },
-            ],
-        };
-
-        let xs = [];
-        let ys = [];
-        for (let w of data) {
-            let d = new Date(w[0]);
-            xs.push(d.getTime() / 1000);
-            ys.push(w[1]);
-        }
-
-        new uPlot(opts, [xs, ys], document.getElementById("weightplot"));
-    });
+    // wait for uplot to be loaded
+    updateWeightHistory();
 </script>
