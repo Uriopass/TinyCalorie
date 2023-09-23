@@ -612,6 +612,9 @@
                 let item = v[date];
                 let day = date.split("-")[2];
                 let datediv = document.getElementById(date);
+                if (!datediv) {
+                    continue;
+                }
                 let loss = weight_loss(item.total);
                 datediv.innerHTML = `<span>${day}</span> <span>${-Math.round(loss)}g</span>`;
                 if (loss > 0) {

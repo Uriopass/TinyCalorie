@@ -12,7 +12,7 @@ use axum::{
     routing::{delete, get, post},
     Extension, Json, Router,
 };
-use chrono::{Datelike, NaiveDate, Utc, Weekday};
+use chrono::{Datelike, Duration, NaiveDate, Utc};
 use db::Database;
 use include_dir::{include_dir, Dir};
 use r2d2_sqlite::rusqlite::{params, Connection, Error};
@@ -20,6 +20,8 @@ use search::Searcher;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::ops::Add;
+use tracing::log;
 
 pub static MIGRATIONS: Dir = include_dir!("migrations");
 
@@ -336,21 +338,22 @@ async fn calendar_data(
     let d = d.unwrap();
     let conn = db.connection().expect("could not get connection");
 
-    let first_day_week = d.with_day0(0).unwrap().iso_week().week();
-    let monday_of_that_week = NaiveDate::from_isoywd(d.year(), first_day_week, Weekday::Mon);
+    let monday_of_first_week = d.add(-Duration::days(d.weekday().num_days_from_monday() as i64));
+    let last_day = d.add(Duration::days(
+        get_days_from_month(d.year(), d.month()) as i64
+    ));
+    let sunday_of_last_week = last_day.add(Duration::days(
+        6 - last_day.weekday().num_days_from_monday() as i64,
+    ));
 
-    let last_day_week = d
-        .with_day(get_days_from_month(d.year(), d.month()))
-        .unwrap()
-        .iso_week()
-        .week();
-    let sunday_of_that_week = NaiveDate::from_isoywd(d.year(), last_day_week, Weekday::Sun);
+    log::info!("monday_of_first_week: {}", monday_of_first_week);
+    log::info!("sunday_of_last_week: {}", sunday_of_last_week);
 
     let mut qry = conn.prepare_cached("SELECT date, sum(calories * multiplier) as total FROM items WHERE date BETWEEN ?1 AND ?2 GROUP BY date").expect("could not prepare qry");
     let mut rows = qry
         .query(params![
-            to_year_month(&monday_of_that_week),
-            to_year_month(&sunday_of_that_week)
+            to_year_month(&monday_of_first_week),
+            to_year_month(&sunday_of_last_week)
         ])
         .expect("could not execute qry");
 
