@@ -237,6 +237,15 @@
         align-items: center;
     }
 
+    .calendar-month-select-date {
+        min-width: 120px;
+        text-align: center;
+    }
+
+    .not_current_month {
+        opacity: 20%;
+    }
+
     .calendar-month-select button {
         margin-left: 10px;
         margin-right: 10px;
@@ -327,7 +336,7 @@
     }
 
     function clickCalendarCell(year, month, day) {
-        summaryDate = new Date(year, month, day + 1);
+        summaryDate = new Date(year, month, day);
         renderItems();
     }
 
@@ -364,34 +373,36 @@
         let newhtml = "";
         newhtml += `<div class="calendar-month-select">
                         <button onclick="calendarLeft()">&lt;</button>
-                        ${month} ${year}
+                        <span class="calendar-month-select-date">${month} ${year}</span>
                         <button onclick="calendarRight()">&gt;</button>
                     </div>`;
-        let n_days = new Date(calendarDate.getFullYear(), (calendarDate.getMonth() + 1) % 12, 0).getDate();
-        let dow = (new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1).getDay() + 6) % 7;
-        if (dow > 0) {
-            newhtml += `<div class="calendar-row">`;
-            for (let i = 0; i < dow; i++) {
-                newhtml += `<div class="calendar-cell"></div>`;
-            }
-        }
-        let summaryDayOfMonth = summaryDate.getDate();
-        let todayDayOfMonth = todayDate.getDate();
+
+        let first_day_of_month = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), 1);
+        let monday_of_first_day_of_month = new Date(first_day_of_month.getTime() - ((first_day_of_month.getDay() + 6) % 7) * 86400 * 1000);
+
+        let last_day_of_month = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0);
+        let sunday_of_last_day_of_month = new Date(last_day_of_month.getTime() + (6 - (last_day_of_month.getDay() + 6) % 7) * 86400 * 1000);
+        console.log(sunday_of_last_day_of_month.getDate());
+
+        let n_days = Math.round((sunday_of_last_day_of_month.getTime() - monday_of_first_day_of_month.getTime()) / (86400 * 1000) + 1);
+        console.log(n_days);
 
         for (let i = 0; i < n_days; i++) {
-            let idow = (i + dow) % 7;
+            let idow = i % 7;
             if (idow % 7 === 0) {
                 newhtml += `<div class="calendar-row">`;
             }
 
-            let id = renderDate(calendarDate.getFullYear(), calendarDate.getMonth() + 1, i + 1);
+            let ith_date = new Date(monday_of_first_day_of_month.getFullYear(), monday_of_first_day_of_month.getMonth(), monday_of_first_day_of_month.getDate() + i);
+            let id = renderDate(ith_date.getFullYear(), ith_date.getMonth() + 1, ith_date.getDate());
 
-            newhtml += `<div id="${id}" class="calendar-cell ${summaryDayOfMonth === (i + 1) ? "summaryday" : (todayDayOfMonth === (i+1) ? "today": "")}" onclick="clickCalendarCell(${calendarDate.getFullYear()}, ${calendarDate.getMonth()}, ${i})">${i + 1}</div>`;
+            let is_summary = ith_date.getMonth() === summaryDate.getMonth() && ith_date.getDate() === summaryDate.getDate();
+            let is_today = ith_date.getMonth() === todayDate.getMonth() && ith_date.getDate() === todayDate.getDate();
+            let is_current_month = ith_date.getMonth() === calendarDate.getMonth();
+
+            newhtml += `<div id="${id}" class="calendar-cell ${is_current_month ? "" : "not_current_month"} ${is_summary ? "summaryday" : (is_today ? "today": "")}" onclick="clickCalendarCell(${ith_date.getFullYear()}, ${ith_date.getMonth()}, ${ith_date.getDate()})">${ith_date.getDate()}</div>`;
 
             if (i === n_days - 1) {
-                for (let i = 0; i < 5 - idow; i++) {
-                    newhtml += `<div class="calendar-cell"></div>`;
-                }
                 newhtml += `</div>`;
                 break;
             }
@@ -400,7 +411,7 @@
             }
         }
 
-        if ((n_days + dow) / 7 <= 5) {
+        if (n_days / 7 <= 5) {
             newhtml += `<div class="calendar-row"><div class="calendar-cell">&nbsp;</div></div>`;
         }
 
