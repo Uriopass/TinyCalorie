@@ -1,7 +1,7 @@
 use fuzzy_matcher::skim::SkimMatcherV2;
 use r2d2_sqlite::rusqlite::Connection;
 use serde::Serialize;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 pub struct SearchItem {
@@ -21,7 +21,7 @@ pub struct Searcher(Arc<SearcherInner>);
 
 struct SearcherInner {
     matcher: SkimMatcherV2,
-    items: RwLock<HashMap<u64, SearchItem>>,
+    items: RwLock<BTreeMap<u64, SearchItem>>,
 }
 
 impl Searcher {
@@ -31,7 +31,7 @@ impl Searcher {
             .expect("could not prepare qry");
         let mut rows = qry.query([]).expect("could not get rows");
 
-        let mut items = HashMap::new();
+        let mut items = BTreeMap::new();
         while let Ok(Some(row)) = rows.next() {
             items.insert(
                 row.get_unwrap("id"),
@@ -84,7 +84,7 @@ impl Searcher {
         let items = self.0.items.read().expect("could not lock read");
         let mut results = vec![];
         let mut seen = HashSet::new();
-        for (&id, item) in &*items {
+        for (&id, item) in items.iter().rev() {
             if item.name.len() == 0 || !seen.insert(&*item.name) {
                 continue;
             }
