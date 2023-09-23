@@ -224,11 +224,11 @@
         flex-basis: 14.285%;
         justify-content: center;
         align-items: center;
-        cursor: pointer;
     }
 
-    .calendar-cell:hover {
+    .calendar-clickable:hover {
         opacity: 0.5;
+        cursor: pointer;
     }
 
     .calendar-month-select {
@@ -331,8 +331,7 @@
         } else {
             calendarDate.setMonth(calendarDate.getMonth() - 1);
         }
-        genCalendar();
-        enrichCalendar();
+        fetchCalendar();
     }
 
     function clickCalendarCell(year, month, day) {
@@ -346,8 +345,7 @@
         } else {
             calendarDate.setMonth(calendarDate.getMonth() + 1);
         }
-        genCalendar();
-        enrichCalendar();
+        fetchCalendar();
     }
 
     // date to YYYY-MM-DD
@@ -358,7 +356,16 @@
     let calendarDate = new Date();
     let todayDate = new Date();
 
-    function genCalendar() {
+    function lossColor(loss) {
+        let saturation = Math.min(100, Math.abs(loss));
+        if (loss > 0) {
+            return `hsl(120,90%,${98 - saturation / 4}%)`;
+        } else {
+            return `hsl(0,90%,${95 - saturation / 4}%)`;
+        }
+    }
+
+    function genCalendar(weight_loss_data) {
         let cadiv = document.getElementById("calendar");
 
         let year = calendarDate.toLocaleDateString('EN', {
@@ -382,15 +389,17 @@
 
         let last_day_of_month = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + 1, 0);
         let sunday_of_last_day_of_month = new Date(last_day_of_month.getTime() + (6 - (last_day_of_month.getDay() + 6) % 7) * 86400 * 1000);
-        console.log(sunday_of_last_day_of_month.getDate());
 
         let n_days = Math.round((sunday_of_last_day_of_month.getTime() - monday_of_first_day_of_month.getTime()) / (86400 * 1000) + 1);
-        console.log(n_days);
 
+        let weektotal = 0;
+        let days_with_data = 0;
         for (let i = 0; i < n_days; i++) {
             let idow = i % 7;
             if (idow % 7 === 0) {
                 newhtml += `<div class="calendar-row">`;
+                weektotal = 0;
+                days_with_data = 0;
             }
 
             let ith_date = new Date(monday_of_first_day_of_month.getFullYear(), monday_of_first_day_of_month.getMonth(), monday_of_first_day_of_month.getDate() + i);
@@ -400,19 +409,36 @@
             let is_today = ith_date.getMonth() === todayDate.getMonth() && ith_date.getDate() === todayDate.getDate();
             let is_current_month = ith_date.getMonth() === calendarDate.getMonth();
 
-            newhtml += `<div id="${id}" class="calendar-cell ${is_current_month ? "" : "not_current_month"} ${is_summary ? "summaryday" : (is_today ? "today": "")}" onclick="clickCalendarCell(${ith_date.getFullYear()}, ${ith_date.getMonth()}, ${ith_date.getDate()})">${ith_date.getDate()}</div>`;
-
-            if (i === n_days - 1) {
-                newhtml += `</div>`;
-                break;
+            let loss;
+            if (weight_loss_data.has(id)) {
+                let calorie_loss = weight_loss_data.get(id);
+                weektotal += calorie_loss;
+                days_with_data += 1;
+                loss = weight_loss(calorie_loss, conf.metabolism);
             }
+
+            newhtml += `<div class="calendar-cell calendar-clickable ${is_current_month ? "" : "not_current_month"} ${is_summary ? "summaryday" : (is_today ? "today": "")}"
+                             style="${loss !== undefined ? `background-color: ${lossColor(loss)};` : ""}"
+                             onclick="clickCalendarCell(${ith_date.getFullYear()}, ${ith_date.getMonth()}, ${ith_date.getDate()})">
+                                  <span>${ith_date.getDate()}</span>
+                                  ${loss !== undefined ? `<span>${-Math.round(loss)}g</span>` : ""}
+                        </div>`;
+
             if (idow === 6) {
+                if(weektotal !== 0) {
+                    let loss = weight_loss(weektotal, conf.metabolism * days_with_data);
+                    newhtml += `<div class="calendar-cell ${is_current_month ? "": "not_current_month"}"  style="background-color: ${lossColor(loss)};">
+                        ${-Math.round(loss)}g
+                    </div>`
+                } else {
+                    newhtml += `<div class="calendar-cell"></div>`
+                }
                 newhtml += `</div>`;
             }
         }
 
         if (n_days / 7 <= 5) {
-            newhtml += `<div class="calendar-row"><div class="calendar-cell">&nbsp;</div></div>`;
+            newhtml += `<div class="calendar-row"><div class="calendar-cell calendar-clickable">&nbsp;</div></div>`;
         }
 
         cadiv.innerHTML = newhtml;
@@ -444,8 +470,8 @@
                 </div>`;
     }
 
-    function weight_loss(total) {
-        return Math.round((parseFloat(conf.metabolism) - total) / 7.2);
+    function weight_loss(total, metabolism) {
+        return Math.round((parseFloat(metabolism) - total) / 7.7);
     }
 
     function renderItems() {
@@ -495,8 +521,7 @@
         }).catch((e) => {
             itemsDiv.innerHTML = `<span style="color:red">Internal error: ${e}</span>`;
         }).then(() => {
-            genCalendar();
-            enrichCalendar();
+            fetchCalendar();
         });
     }
 
@@ -526,7 +551,6 @@
 
     function init() {
         calendarDate = new Date();
-        genCalendar();
         document.getElementById("calories_metabolism").oninput = () => {
             updateConf('metabolism', document.getElementById("calories_metabolism").value, renderItems);
         };
@@ -599,7 +623,7 @@
         renderItems();
     }
 
-    function enrichCalendar() {
+    function fetchCalendar() {
         let monthh = calendarDate.getMonth() + 1;
         let yearmonth = `${calendarDate.getFullYear()}-${(monthh < 10) ? `0${monthh}` : monthh}`;
         fetch('/api/calendar_data/' + yearmonth, {method: 'get'}).then((v) => {
@@ -608,23 +632,12 @@
             }
             return v.json();
         }).then((v) => {
+            let weight_loss_data = new Map();
             for (let date of Object.keys(v)) {
                 let item = v[date];
-                let day = date.split("-")[2];
-                let datediv = document.getElementById(date);
-                if (!datediv) {
-                    continue;
-                }
-                let loss = weight_loss(item.total);
-                datediv.innerHTML = `<span>${day}</span> <span>${-Math.round(loss)}g</span>`;
-                if (loss > 0) {
-                    let saturation = Math.min(100, loss);
-                    datediv.style.backgroundColor = `hsl(120,90%,${98 - saturation / 4}%)`;
-                } else {
-                    let saturation = Math.min(100, -loss);
-                    datediv.style.backgroundColor = `hsl(0,90%,${95 - saturation / 4}%)`;
-                }
+                weight_loss_data.set(date, item.total);
             }
+            genCalendar(weight_loss_data);
         }).catch((e) => {
             console.log(e)
         })
