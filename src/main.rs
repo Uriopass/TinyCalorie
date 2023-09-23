@@ -12,7 +12,7 @@ use axum::{
     routing::{delete, get, post},
     Extension, Json, Router,
 };
-use chrono::Utc;
+use chrono::{Datelike, NaiveDate, Utc, Weekday};
 use db::Database;
 use include_dir::{include_dir, Dir};
 use r2d2_sqlite::rusqlite::{params, Connection, Error};
@@ -223,7 +223,7 @@ async fn weight_history(
         .prepare("select date, weight from weight where date >= ? order by date")
         .expect("could not prepare statement");
     let mut rows = stmt
-        .query_map(&[&after_date.to_year_month_day()], |row| {
+        .query_map(&[&to_year_month_day(&after_date)], |row| {
             Ok((row.get(0)?, row.get(1)?))
         })
         .expect("could not query");
@@ -282,16 +282,10 @@ pub struct CalendarItem {
 #[derive(Serialize, Default)]
 pub struct CalendarData(HashMap<String, CalendarItem>);
 
-struct Date {
-    year: u32,
-    month: u32,
-    day: u32,
-}
-
 /// date is encoded as YYYY-MM-DD or YYYY-MM
-fn parse_date(date: &str) -> Option<Date> {
+fn parse_date(date: &str) -> Option<NaiveDate> {
     let v: Vec<&str> = date.split("-").collect();
-    let year = v[0].parse().ok()?;
+    let year: i32 = v[0].parse().ok()?;
     if year < 1000 || year > 9999 {
         return None;
     }
@@ -303,17 +297,31 @@ fn parse_date(date: &str) -> Option<Date> {
     if day < 1 || day > 31 {
         return None;
     }
-    Some(Date { year, month, day })
+    Some(NaiveDate::from_ymd(year, month, day))
 }
 
-impl Date {
-    fn to_year_month(&self) -> String {
-        format!("{:04}-{:02}", self.year, self.month)
-    }
+fn to_year_month(d: &NaiveDate) -> String {
+    format!("{:04}-{:02}", d.year(), d.month())
+}
 
-    fn to_year_month_day(&self) -> String {
-        format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)
-    }
+fn to_year_month_day(d: &NaiveDate) -> String {
+    format!("{:04}-{:02}-{:02}", d.year(), d.month(), d.day())
+}
+
+pub fn get_days_from_month(year: i32, month: u32) -> u32 {
+    NaiveDate::from_ymd(
+        match month {
+            12 => year + 1,
+            _ => year,
+        },
+        match month {
+            12 => 1,
+            _ => month + 1,
+        },
+        1,
+    )
+    .signed_duration_since(NaiveDate::from_ymd(year, month, 1))
+    .num_days() as u32
 }
 
 async fn calendar_data(
@@ -328,16 +336,21 @@ async fn calendar_data(
     let d = d.unwrap();
     let conn = db.connection().expect("could not get connection");
 
+    let first_day_week = d.with_day0(0).unwrap().iso_week().week();
+    let monday_of_that_week = NaiveDate::from_isoywd(d.year(), first_day_week, Weekday::Mon);
+
+    let last_day_week = d
+        .with_day(get_days_from_month(d.year(), d.month()))
+        .unwrap()
+        .iso_week()
+        .week();
+    let sunday_of_that_week = NaiveDate::from_isoywd(d.year(), last_day_week, Weekday::Sun);
+
     let mut qry = conn.prepare_cached("SELECT date, sum(calories * multiplier) as total FROM items WHERE date BETWEEN ?1 AND ?2 GROUP BY date").expect("could not prepare qry");
     let mut rows = qry
         .query(params![
-            d.to_year_month(),
-            Date {
-                year: d.year,
-                month: d.month + 1,
-                day: 1
-            }
-            .to_year_month()
+            to_year_month(&monday_of_that_week),
+            to_year_month(&sunday_of_that_week)
         ])
         .expect("could not execute qry");
 
@@ -486,56 +499,26 @@ async fn remove_item(
 
 #[cfg(test)]
 mod tests_date {
-    use super::Date;
+    use super::*;
+    use chrono::NaiveDate;
     #[test]
     fn test_to_year_month() {
-        assert_eq!(
-            Date {
-                year: 2021,
-                month: 1,
-                day: 1
-            }
-            .to_year_month(),
-            "2021-01"
-        );
-        assert_eq!(
-            Date {
-                year: 2021,
-                month: 12,
-                day: 1
-            }
-            .to_year_month(),
-            "2021-12"
-        );
+        assert_eq!(to_year_month(&NaiveDate::from_ymd(2021, 1, 1)), "2021-01");
+        assert_eq!(to_year_month(&NaiveDate::from_ymd(2021, 12, 1)), "2021-12");
     }
 
     #[test]
     fn test_to_year_month_day() {
         assert_eq!(
-            Date {
-                year: 2021,
-                month: 1,
-                day: 1
-            }
-            .to_year_month_day(),
+            to_year_month_day(&NaiveDate::from_ymd(2021, 1, 1)),
             "2021-01-01"
         );
         assert_eq!(
-            Date {
-                year: 2021,
-                month: 12,
-                day: 1
-            }
-            .to_year_month_day(),
+            to_year_month_day(&NaiveDate::from_ymd(2021, 12, 1)),
             "2021-12-01"
         );
         assert_eq!(
-            Date {
-                year: 2021,
-                month: 1,
-                day: 31
-            }
-            .to_year_month_day(),
+            to_year_month_day(&NaiveDate::from_ymd(2021, 1, 31)),
             "2021-01-31"
         );
     }
