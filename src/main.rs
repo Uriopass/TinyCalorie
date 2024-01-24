@@ -21,6 +21,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::ops::Add;
+use axum::routing::put;
 use tracing::log;
 
 pub static MIGRATIONS: Dir = include_dir!("migrations");
@@ -126,6 +127,7 @@ async fn main() {
         .route("/api/weight_history/:after_date", get(weight_history))
         .route("/api/item", post(add_item))
         .route("/api/item/:id", delete(remove_item).put(edit_item))
+        .route("/api/item/:id/plus1", put(plus_one))
         .route("/api/autocomplete/:qry", get(autocomplete))
         .route("/api/summary/:date", get(summary))
         .route("/api/calendar_data/:date", get(calendar_data))
@@ -447,6 +449,25 @@ async fn edit_item(
         return StatusCode::NOT_FOUND;
     }
     search.update(id, item.name, item.calories);
+    StatusCode::OK
+}
+
+async fn plus_one(
+    Path(id): Path<u64>,
+    Extension(db): Extension<Database>,
+) -> impl IntoResponse {
+    tracing::info!("plus one item {:?}", id);
+    let conn = db.connection().expect("could not get connection");
+    let n_updated = conn
+        .execute(
+            "UPDATE items SET multiplier = multiplier + 1 WHERE id = ?1;",
+            params![
+            id,
+        ])
+        .expect("could not execute update item qry");
+    if n_updated == 0 {
+        return StatusCode::NOT_FOUND;
+    }
     StatusCode::OK
 }
 

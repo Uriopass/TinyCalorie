@@ -67,6 +67,17 @@
         width: calc(min(600px, 100%));
     }
 
+    .item-plus1 {
+        padding-left: 5px;
+        padding-right: 10px;
+        opacity: 0;
+        height: 18px;
+    }
+
+    .item:hover .item-plus1 {
+        opacity: 1;
+    }
+
     .item {
         display: flex;
         padding: 10px;
@@ -461,6 +472,7 @@
                     <div class="item-start">
                         <div class="item-multiplier">x${item.multiplier}</div>
                         <div class="item-name">${item.name}</div>
+                        <div class="item-plus1" onclick="plusOneItem(${item.id})"><button>+1</button></div>
                     </div>
                     <div class="item-end">
                         <div class="item-time">${formatted}</div>
@@ -651,6 +663,18 @@
             }
             renderItems();
         })
+    }
+
+    function plusOneItem(id) {
+        return fetch(`/api/item/${id}/plus1`, {
+            method: "put",
+            headers: {'Content-Type': 'application/json'},
+        }).then((res) => {
+                if (!res.ok) {
+                    return;
+                }
+                renderItems();
+            });
     }
 
     async function addItem(name, calories, multiplier) {
