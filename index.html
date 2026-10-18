@@ -125,10 +125,14 @@
         text-overflow: ellipsis;
     }
 
-    #submit {
+    #submit, #photo_button {
         font-size: 10px;
         padding: 1px 3px;
         height: 20px;
+    }
+
+    #photo_button {
+        margin-left: 5px;
     }
 
     .autocomplete {
@@ -293,6 +297,8 @@
                 </div>
                 <input id="calories_calories" autocomplete="false" type="number" placeholder="Calories"/>
                 <button id="submit">OK</button>
+                <button id="photo_button" title="Estimate calories from a photo">📷</button>
+                <input id="photo_input" type="file" accept="image/*" hidden/>
             </div>
             <div id="weight">
                 <input id="weight_input" autocomplete="false" type="number" placeholder="Weight"/>
@@ -632,8 +638,52 @@
             }
         };
         document.getElementById("submit").onclick = onAdd;
+        document.getElementById("photo_button").onclick = () => document.getElementById("photo_input").click();
+        document.getElementById("photo_input").onchange = onPhoto;
         document.getElementById("weight_input").oninput = onWeightAdd;
         renderItems();
+    }
+
+    // Downscale to at most 1024px on the long edge: plenty for food, and keeps the API call cheap.
+    function photoToJpegBase64(file) {
+        return createImageBitmap(file).then((bmp) => {
+            let scale = Math.min(1, 1024 / Math.max(bmp.width, bmp.height));
+            let canvas = document.createElement("canvas");
+            canvas.width = Math.round(bmp.width * scale);
+            canvas.height = Math.round(bmp.height * scale);
+            canvas.getContext("2d").drawImage(bmp, 0, 0, canvas.width, canvas.height);
+            return canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
+        });
+    }
+
+    function onPhoto() {
+        let input = document.getElementById("photo_input");
+        let button = document.getElementById("photo_button");
+        let file = input.files[0];
+        input.value = "";
+        if (!file) {
+            return;
+        }
+        button.disabled = true;
+        button.innerText = "…";
+        photoToJpegBase64(file).then((image) => fetch("/api/photo", {
+            method: "post",
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({image: image, media_type: "image/jpeg"}),
+        })).then((v) => v.json().then((res) => {
+            if (!v.ok) {
+                throw res.error || ('status ' + v.status);
+            }
+            document.getElementById("calories_name").value = res.name;
+            document.getElementById("calories_multiplier").value = renderRound(res.multiplier);
+            document.getElementById("calories_calories").value = Math.round(res.calories);
+            document.getElementById("calories_calories").focus();
+        })).catch((e) => {
+            alert("Could not estimate calories from photo: " + e);
+        }).then(() => {
+            button.disabled = false;
+            button.innerText = "📷";
+        });
     }
 
     function fetchCalendar() {

@@ -93,6 +93,7 @@ networks:
  - [x] Activities as negative calorie spending
  - [x] Calendar showing weight loss
  - [x] Browse history through calendar (and add items if forgotten)
+ - [x] 📷 Estimate calories from a photo (Claude Opus 5.5 via OpenRouter, needs `OPENROUTER_API_KEY` set on the server, about 1-3¢ per photo)
 
 ## Want
 

@@ -1,5 +1,6 @@
 mod db;
 mod migrate;
+mod photo;
 mod search;
 
 use crate::search::SearchItem;
@@ -126,6 +127,7 @@ async fn main() {
         .route("/api/weight", post(add_weight))
         .route("/api/weight_history/:after_date", get(weight_history))
         .route("/api/item", post(add_item))
+        .route("/api/photo", post(photo::estimate_photo))
         .route("/api/item/:id", delete(remove_item).put(edit_item))
         .route("/api/item/:id/plus1", put(plus_one))
         .route("/api/autocomplete/:qry", get(autocomplete))
