@@ -1,8 +1,30 @@
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::sync::Mutex;
 
 const MODEL: &str = "anthropic/claude-opus-5.5";
+// The app has no auth, so cap paid API calls per day (override with PHOTO_DAILY_LIMIT).
+const DEFAULT_DAILY_LIMIT: u32 = 50;
+static CALLS_TODAY: Mutex<(String, u32)> = Mutex::new((String::new(), 0));
+
+/// Returns false if today's photo budget is used up, otherwise counts one call.
+fn take_daily_slot() -> bool {
+    let limit = std::env::var("PHOTO_DAILY_LIMIT")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(DEFAULT_DAILY_LIMIT);
+    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
+    let mut calls = CALLS_TODAY.lock().unwrap();
+    if calls.0 != today {
+        *calls = (today, 0);
+    }
+    if calls.1 >= limit {
+        return false;
+    }
+    calls.1 += 1;
+    true
+}
 
 const PROMPT: &str = "This is a photo of food someone is about to eat. Estimate its calories for a calorie counter.
 - name: short description of the food, a few words, e.g. \"Pepperoni pizza slice\". If there are several foods, name them all briefly, e.g. \"Steak, fries, salad\".
@@ -50,6 +72,12 @@ pub async fn estimate_photo(Json(req): Json<PhotoRequest>) -> impl IntoResponse 
         "image/jpeg" | "image/png" | "image/gif" | "image/webp"
     ) {
         return err(StatusCode::BAD_REQUEST, "unsupported image type");
+    }
+    if !take_daily_slot() {
+        return err(
+            StatusCode::TOO_MANY_REQUESTS,
+            "daily photo limit reached, try again tomorrow",
+        );
     }
 
     let body = json!({
