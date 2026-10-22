@@ -41,9 +41,9 @@ Return the kcal for exactly ONE of what the name describes:
 - Otherwise return kcal for one usual portion (one apple, one Big Mac, one plate of pasta).
 Weights are as bought, before cooking: rice, pasta, semolina, couscous, oats, lentils and other dry foods are weighed DRY (\"g de riz\" is about 3.5 kcal, \"g de pâtes\" about 3.6), meat and fish raw. Only when dry makes no sense (yogurt, fromage blanc, soup, milk, cheese, bread, fruit) use the food as it is.
 Sport and other activities burn calories: return them negative.
-When a past entry below is the same food or activity (maybe with another amount or spelling), scale from the user's number rather than general knowledge. A different food that only shares a word is not the same food: fromage blanc is not fromage, and for it use your own knowledge.";
+The user's past entries below are rough notes, not measurements: they hint at the user's usual portions and products, but can be off. Use them as context and give your own best estimate. A different food that only shares a word is not the same food: fromage blanc is not fromage.";
 
-const HISTORY_INTRO: &str = "\nThe user's own past entries for similar foods (use them to match their portions and habits):\n";
+const HISTORY_INTRO: &str = "\nThe user's past entries for similar foods (rough indications only):\n";
 
 #[derive(Deserialize)]
 pub struct GuessRequest {
@@ -70,10 +70,6 @@ pub async fn guess_calories(
             StatusCode::BAD_REQUEST,
             "name must be 2 to 100 characters",
         );
-    }
-    // Already logged under this name: the user's own number beats any guess.
-    if let Some(calories) = search.exact(&name) {
-        return (StatusCode::OK, Json(json!({ "calories": calories })));
     }
     if let Some(&calories) = tier
         .cache

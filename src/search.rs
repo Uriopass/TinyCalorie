@@ -80,17 +80,6 @@ impl Searcher {
             .remove(&id);
     }
 
-    /// The most recent calories logged under exactly this name (case and accents ignored).
-    pub fn exact(&self, name: &str) -> Option<f64> {
-        let key = normalize(name);
-        let items = self.0.items.read().expect("could not lock read");
-        items
-            .values()
-            .rev()
-            .find(|item| normalize(&item.name) == key)
-            .map(|item| item.calories)
-    }
-
     /// Up to `n` distinct past entries sharing the most words with `qry`, most recent value of each.
     pub fn similar(&self, qry: &str, n: usize) -> Vec<(String, f64)> {
         let words = content_words(qry);
