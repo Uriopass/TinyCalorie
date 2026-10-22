@@ -6,12 +6,33 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-// gpt-oss-120b on Cerebras answers in ~0.4s with about the same accuracy on the user's
-// conventions as Claude Sonnet 5.5 (~1.6s) and Haiku 5.5 (~1.5s). Groq was as fast but returned
-// broken JSON, so Cerebras goes first and the other hosts are only a fallback.
-const MODEL: &str = "openai/gpt-oss-120b";
-static LIMIT: DailyLimit = DailyLimit::new("GUESS_DAILY_LIMIT", 500);
-static CACHE: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
+/// The page asks both tiers at once: the fast guess shows first, the smart one replaces it.
+struct Tier {
+    label: &'static str,
+    model: &'static str,
+    provider: Option<&'static str>,
+    limit: DailyLimit,
+    cache: Mutex<Option<HashMap<String, f64>>>,
+}
+
+// gpt-oss-120b on Cerebras answers in ~0.4s; Groq was as fast but returned broken JSON, so
+// Cerebras goes first and the other hosts are only a fallback.
+static FAST: Tier = Tier {
+    label: "name guess (fast)",
+    model: "openai/gpt-oss-120b",
+    provider: Some("Cerebras"),
+    limit: DailyLimit::new("GUESS_DAILY_LIMIT", 500),
+    cache: Mutex::new(None),
+};
+
+// Claude Sonnet 5.5 takes ~1.6s but follows the user's conventions more reliably.
+static SMART: Tier = Tier {
+    label: "name guess (smart)",
+    model: "anthropic/claude-sonnet-5.5",
+    provider: None,
+    limit: DailyLimit::new("SMART_GUESS_DAILY_LIMIT", 500),
+    cache: Mutex::new(None),
+};
 
 const PROMPT: &str = "You estimate calories for a calorie counter. The user typed a food name, often in French.
 Return the kcal for exactly ONE of what the name describes:
@@ -27,6 +48,9 @@ const HISTORY_INTRO: &str = "\nThe user's own past entries for similar foods (us
 #[derive(Deserialize)]
 pub struct GuessRequest {
     name: String,
+    /// Use the slower, more reliable model.
+    #[serde(default)]
+    smart: bool,
 }
 
 #[derive(Deserialize)]
@@ -38,11 +62,11 @@ pub async fn guess_calories(
     Json(req): Json<GuessRequest>,
     Extension(search): Extension<Searcher>,
 ) -> impl IntoResponse {
-    const LABEL: &str = "name guess";
+    let tier = if req.smart { &SMART } else { &FAST };
     let name = req.name.trim().to_lowercase();
     if name.chars().count() < 2 || name.chars().count() > 100 {
         return err(
-            LABEL,
+            tier.label,
             StatusCode::BAD_REQUEST,
             "name must be 2 to 100 characters",
         );
@@ -51,12 +75,18 @@ pub async fn guess_calories(
     if let Some(calories) = search.exact(&name) {
         return (StatusCode::OK, Json(json!({ "calories": calories })));
     }
-    if let Some(&calories) = CACHE.lock().unwrap().as_ref().and_then(|c| c.get(&name)) {
+    if let Some(&calories) = tier
+        .cache
+        .lock()
+        .unwrap()
+        .as_ref()
+        .and_then(|c| c.get(&name))
+    {
         return (StatusCode::OK, Json(json!({ "calories": calories })));
     }
-    if !LIMIT.take() {
+    if !tier.limit.take() {
         return err(
-            LABEL,
+            tier.label,
             StatusCode::TOO_MANY_REQUESTS,
             "daily guess limit reached, try again tomorrow",
         );
@@ -79,11 +109,11 @@ pub async fn guess_calories(
     prompt.push_str(&format!("\nFood: {}", name));
     let content = json!(prompt);
     let text = match structured_completion(
-        LABEL,
-        MODEL,
+        tier.label,
+        tier.model,
         "low",
         2000,
-        Some(json!({"order": ["Cerebras"]})),
+        tier.provider.map(|p| json!({ "order": [p] })),
         content,
         schema,
     )
@@ -94,7 +124,7 @@ pub async fn guess_calories(
     };
     match serde_json::from_str::<Guess>(&text) {
         Ok(g) => {
-            CACHE
+            tier.cache
                 .lock()
                 .unwrap()
                 .get_or_insert_with(HashMap::new)
@@ -102,7 +132,7 @@ pub async fn guess_calories(
             (StatusCode::OK, Json(json!({ "calories": g.calories })))
         }
         Err(_) => err(
-            LABEL,
+            tier.label,
             StatusCode::BAD_GATEWAY,
             "could not parse model output",
         ),

@@ -710,6 +710,8 @@
         return pendingGuess;
     }
 
+    // Asks the fast model (~0.4s) and the smart one (~1.6s) together: the fast guess shows first,
+    // then the smart guess replaces it, unless the user has typed their own calories meanwhile.
     function runGuess() {
         guessTimer = null;
         let name = document.getElementById("calories_name").value.trim();
@@ -717,21 +719,30 @@
         if (name.length < 2 || (cal.value && cal.dataset.guessed === undefined)) {
             return;
         }
-        let p = fetch("/api/guess", {
-            method: "post",
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name}),
-        }).then((v) => v.ok ? v.json() : null).then((res) => {
-            // Only fill if the name hasn't changed and the user hasn't entered calories themselves.
+        let apply = (res, source) => {
             if (!res || document.getElementById("calories_name").value.trim() !== name) {
                 return;
             }
             if (cal.value && cal.dataset.guessed === undefined) {
                 return;
             }
+            if (source === "fast" && cal.dataset.guessed === "smart") {
+                return;
+            }
             cal.value = renderRound(res.calories);
-            cal.dataset.guessed = "";
-        }).catch((e) => console.log(e)).then(() => {
+            cal.dataset.guessed = source;
+        };
+        // Settles once the first guess has been applied (or both failed), for Enter-before-guess.
+        let p = new Promise((resolve) => {
+            for (let source of ["fast", "smart"]) {
+                fetch("/api/guess", {
+                    method: "post",
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: name, smart: source === "smart"}),
+                }).then((v) => v.ok ? v.json() : null).then((res) => apply(res, source))
+                    .catch((e) => console.log(e)).then(resolve);
+            }
+        }).then(() => {
             if (pendingGuess === p) {
                 pendingGuess = null;
             }
