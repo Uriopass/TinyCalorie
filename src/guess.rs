@@ -17,7 +17,8 @@ Return the kcal for exactly ONE of what the name describes:
 - If it has a quantity, like \"200g de riz\" or \"2 oeufs\", return kcal for that whole quantity.
 - Otherwise return kcal for one usual portion (one apple, one Big Mac, one plate of pasta).
 Weights are as bought, before cooking: rice, pasta, semolina, couscous, oats, lentils and other dry foods are weighed DRY (\"g de riz\" is about 3.5 kcal, \"g de pâtes\" about 3.6), meat and fish raw. Only when dry makes no sense (yogurt, fromage blanc, soup, milk, cheese, bread, fruit) use the food as it is.
-Sport and other activities burn calories: return them negative (\"escalade 1h\" is about -150).";
+Sport and other activities burn calories: return them negative.
+When the user's past entries below cover the same food or activity, scale from their numbers rather than general knowledge.";
 
 const HISTORY_INTRO: &str = "\nThe user's own past entries for similar foods (use them to match their portions and habits):\n";
 
