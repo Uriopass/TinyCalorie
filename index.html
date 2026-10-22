@@ -125,6 +125,12 @@
         text-overflow: ellipsis;
     }
 
+    /* calories filled in by the LLM guess, until the user types their own */
+    #calories_calories[data-guessed] {
+        color: #888;
+        font-style: italic;
+    }
+
     #submit {
         font-size: 10px;
         padding: 1px 3px;
@@ -338,16 +344,9 @@
     let conf;
     let summaryDate = new Date();
 
+    // Up to 2 decimals, trailing zeros dropped: 201.5, 1.3, 195
     function renderRound(v) {
-        let fract = Math.round(v * 100) % 100;
-        let real = Math.round(v);
-        if (fract === 0) {
-            return `${real}`;
-        }
-        if (fract % 10 === 0) {
-            fract = fract / 10;
-        }
-        return `${real}.${fract}`;
+        return `${Math.round(v * 100) / 100}`;
     }
 
     function calendarLeft() {
@@ -595,6 +594,15 @@
 
         let onAdd = () => {
             if (!document.getElementById("calories_calories").value) {
+                // A guess for this name is on its way: add as soon as it lands.
+                let pending = flushGuess();
+                if (pending) {
+                    pending.then(() => {
+                        if (document.getElementById("calories_calories").value) {
+                            onAdd();
+                        }
+                    });
+                }
                 return
             }
             addItem(document.getElementById("calories_name").value, document.getElementById("calories_calories").value, document.getElementById("calories_multiplier").value).then((res) => {
@@ -605,6 +613,7 @@
             });
             document.getElementById("calories_name").value = "";
             document.getElementById("calories_calories").value = "";
+            delete document.getElementById("calories_calories").dataset.guessed;
             document.getElementById("calories_multiplier").value = "1";
             document.getElementById("calories_name").focus();
         };
@@ -650,11 +659,16 @@
         let onSubmit = (text, data) => {
             document.getElementById("calories_name").value = text;
             document.getElementById("calories_calories").value = data;
+            delete document.getElementById("calories_calories").dataset.guessed;
         };
         let onSubmitEmpty = () => {
             onAdd();
         };
         autocomplete(document.getElementById("calories_name"), onInput, onSubmit, onSubmitEmpty);
+        document.getElementById("calories_name").addEventListener("input", onNameInput);
+        document.getElementById("calories_calories").addEventListener("input", () => {
+            delete document.getElementById("calories_calories").dataset.guessed;
+        });
         document.getElementById("calories_calories").onkeydown = (e) => {
             if (e.key === "Enter" && document.getElementById("calories_calories").value) {
                 onAdd();
@@ -671,6 +685,58 @@
         document.getElementById("weight_input").oninput = onWeightAdd;
         document.getElementById("weight_lbs_input").oninput = onWeightLbsAdd;
         renderItems();
+    }
+
+    // Guess the calories of what's typed in the name field, once typing pauses.
+    let guessTimer = null;
+    let pendingGuess = null;
+
+    function onNameInput() {
+        let cal = document.getElementById("calories_calories");
+        if (cal.dataset.guessed !== undefined) {
+            cal.value = "";
+            delete cal.dataset.guessed;
+        }
+        clearTimeout(guessTimer);
+        guessTimer = setTimeout(runGuess, 400);
+    }
+
+    // Starts the debounced guess now if it is still waiting; returns the in-flight guess, if any.
+    function flushGuess() {
+        if (guessTimer !== null) {
+            clearTimeout(guessTimer);
+            runGuess();
+        }
+        return pendingGuess;
+    }
+
+    function runGuess() {
+        guessTimer = null;
+        let name = document.getElementById("calories_name").value.trim();
+        let cal = document.getElementById("calories_calories");
+        if (name.length < 2 || (cal.value && cal.dataset.guessed === undefined)) {
+            return;
+        }
+        let p = fetch("/api/guess", {
+            method: "post",
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name}),
+        }).then((v) => v.ok ? v.json() : null).then((res) => {
+            // Only fill if the name hasn't changed and the user hasn't entered calories themselves.
+            if (!res || document.getElementById("calories_name").value.trim() !== name) {
+                return;
+            }
+            if (cal.value && cal.dataset.guessed === undefined) {
+                return;
+            }
+            cal.value = renderRound(res.calories);
+            cal.dataset.guessed = "";
+        }).catch((e) => console.log(e)).then(() => {
+            if (pendingGuess === p) {
+                pendingGuess = null;
+            }
+        });
+        pendingGuess = p;
     }
 
     // Downscale to at most 1024px on the long edge: plenty for food, and keeps the API call cheap.

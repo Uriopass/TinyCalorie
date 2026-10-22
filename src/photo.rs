@@ -1,30 +1,10 @@
+use crate::llm::{err, structured_completion, DailyLimit};
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use std::sync::Mutex;
+use serde_json::json;
 
 const MODEL: &str = "anthropic/claude-opus-5.5";
-// The app has no auth, so cap paid API calls per day (override with PHOTO_DAILY_LIMIT).
-const DEFAULT_DAILY_LIMIT: u32 = 50;
-static CALLS_TODAY: Mutex<(String, u32)> = Mutex::new((String::new(), 0));
-
-/// Returns false if today's photo budget is used up, otherwise counts one call.
-fn take_daily_slot() -> bool {
-    let limit = std::env::var("PHOTO_DAILY_LIMIT")
-        .ok()
-        .and_then(|x| x.parse().ok())
-        .unwrap_or(DEFAULT_DAILY_LIMIT);
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let mut calls = CALLS_TODAY.lock().unwrap();
-    if calls.0 != today {
-        *calls = (today, 0);
-    }
-    if calls.1 >= limit {
-        return false;
-    }
-    calls.1 += 1;
-    true
-}
+static LIMIT: DailyLimit = DailyLimit::new("PHOTO_DAILY_LIMIT", 50);
 
 const PROMPT: &str = "This is a photo of food someone is about to eat. Estimate its calories for a calorie counter.
 - name: short description of the food, a few words, e.g. \"Pepperoni pizza slice\". If there are several foods, name them all briefly, e.g. \"Steak, fries, salad\".
@@ -46,118 +26,42 @@ pub struct PhotoEstimate {
     multiplier: f64,
 }
 
-#[derive(Serialize)]
-struct PhotoError {
-    error: String,
-}
-
-fn err(status: StatusCode, msg: impl Into<String>) -> (StatusCode, Json<Value>) {
-    let error = msg.into();
-    tracing::error!("photo estimate: {}", error);
-    (status, Json(json!(PhotoError { error })))
-}
-
 pub async fn estimate_photo(Json(req): Json<PhotoRequest>) -> impl IntoResponse {
-    let api_key = match std::env::var("OPENROUTER_API_KEY") {
-        Ok(k) if !k.is_empty() => k,
-        _ => {
-            return err(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "OPENROUTER_API_KEY is not set on the server",
-            )
-        }
-    };
+    const LABEL: &str = "photo estimate";
     if !matches!(
         req.media_type.as_str(),
         "image/jpeg" | "image/png" | "image/gif" | "image/webp"
     ) {
-        return err(StatusCode::BAD_REQUEST, "unsupported image type");
+        return err(LABEL, StatusCode::BAD_REQUEST, "unsupported image type");
     }
-    if !take_daily_slot() {
+    if !LIMIT.take() {
         return err(
+            LABEL,
             StatusCode::TOO_MANY_REQUESTS,
             "daily photo limit reached, try again tomorrow",
         );
     }
 
-    let body = json!({
-        "model": MODEL,
-        "max_tokens": 16000,
-        "reasoning": {"effort": "medium"},
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "calorie_estimate",
-                "strict": true,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "name": {"type": "string"},
-                        "calories": {"type": "number"},
-                        "multiplier": {"type": "number"}
-                    },
-                    "required": ["name", "calories", "multiplier"],
-                    "additionalProperties": false
-                }
-            }
+    let content = json!([
+        {"type": "image_url", "image_url": {"url": format!("data:{};base64,{}", req.media_type, req.image)}},
+        {"type": "text", "text": PROMPT}
+    ]);
+    let schema = json!({
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "calories": {"type": "number"},
+            "multiplier": {"type": "number"}
         },
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": format!("data:{};base64,{}", req.media_type, req.image)}},
-                {"type": "text", "text": PROMPT}
-            ]
-        }]
+        "required": ["name", "calories", "multiplier"],
+        "additionalProperties": false
     });
-
-    let resp = reqwest::Client::new()
-        .post("https://openrouter.ai/api/v1/chat/completions")
-        .bearer_auth(api_key)
-        .header("X-Title", "TinyCalorie")
-        .json(&body)
-        .send()
-        .await;
-    let resp = match resp {
-        Ok(r) => r,
-        Err(e) => return err(StatusCode::BAD_GATEWAY, format!("request failed: {}", e)),
+    let text = match structured_completion(LABEL, MODEL, "medium", 16000, content, schema).await {
+        Ok(t) => t,
+        Err(e) => return e,
     };
-    let status = resp.status();
-    let msg: Value = match resp.json().await {
-        Ok(v) => v,
-        Err(e) => return err(StatusCode::BAD_GATEWAY, format!("bad response: {}", e)),
-    };
-    if !status.is_success() {
-        return err(
-            StatusCode::BAD_GATEWAY,
-            format!("API error {}: {}", status, msg["error"]["message"]),
-        );
+    match serde_json::from_str::<PhotoEstimate>(&text) {
+        Ok(estimate) => (StatusCode::OK, Json(json!(estimate))),
+        Err(_) => err(LABEL, StatusCode::BAD_GATEWAY, "could not parse model output"),
     }
-
-    let usage = &msg["usage"];
-    tracing::info!(
-        "photo estimate: model={} prompt_tokens={} completion_tokens={} (reasoning={}) cost=${}",
-        msg["model"],
-        usage["prompt_tokens"],
-        usage["completion_tokens"],
-        usage["completion_tokens_details"]["reasoning_tokens"],
-        usage["cost"]
-    );
-
-    let choice = &msg["choices"][0];
-    match choice["finish_reason"].as_str() {
-        Some("stop") => {}
-        other => {
-            return err(
-                StatusCode::BAD_GATEWAY,
-                format!("model stopped early: {}", other.unwrap_or("unknown")),
-            )
-        }
-    }
-
-    let text = choice["message"]["content"].as_str();
-    let estimate: PhotoEstimate = match text.map(serde_json::from_str) {
-        Some(Ok(e)) => e,
-        _ => return err(StatusCode::BAD_GATEWAY, "could not parse model output"),
-    };
-    (StatusCode::OK, Json(json!(estimate)))
 }

@@ -1,4 +1,6 @@
 mod db;
+mod guess;
+mod llm;
 mod migrate;
 mod photo;
 mod search;
@@ -128,6 +130,7 @@ async fn main() {
         .route("/api/weight_history/:after_date", get(weight_history))
         .route("/api/item", post(add_item))
         .route("/api/photo", post(photo::estimate_photo))
+        .route("/api/guess", post(guess::guess_calories))
         .route("/api/item/:id", delete(remove_item).put(edit_item))
         .route("/api/item/:id/plus1", put(plus_one))
         .route("/api/autocomplete/:qry", get(autocomplete))
