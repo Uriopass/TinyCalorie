@@ -1,11 +1,12 @@
 use crate::llm::{err, structured_completion, DailyLimit};
-use axum::{http::StatusCode, response::IntoResponse, Json};
+use crate::search::Searcher;
+use axum::{http::StatusCode, response::IntoResponse, Extension, Json};
 use serde::Deserialize;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-// Sonnet at low effort answered in ~1.8s and, unlike Haiku, kept "g de pâtes" at cooked weight.
+// Sonnet at low effort answered in ~1.8s and followed the weight rules more reliably than Haiku.
 const MODEL: &str = "anthropic/claude-sonnet-5.5";
 static LIMIT: DailyLimit = DailyLimit::new("GUESS_DAILY_LIMIT", 500);
 static CACHE: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
@@ -15,8 +16,10 @@ Return the kcal for exactly ONE of what the name describes:
 - If the name starts with a unit and no number, like \"g de riz\", \"100g de poulet\", \"cl de vin\", \"cuillère d'huile\", return kcal for one such unit (1 g of rice, 100 g of chicken, 1 cl of wine...). The user puts the amount in a separate multiplier field.
 - If it has a quantity, like \"200g de riz\" or \"2 oeufs\", return kcal for that whole quantity.
 - Otherwise return kcal for one usual portion (one apple, one Big Mac, one plate of pasta).
-Assume food as usually eaten (cooked rice and pasta, not dry) unless the name says otherwise (\"cru\", \"sec\", \"raw\").
-Food: ";
+Weights are as bought, before cooking: rice, pasta, semolina, couscous, oats, lentils and other dry foods are weighed DRY (\"g de riz\" is about 3.5 kcal, \"g de pâtes\" about 3.6), meat and fish raw. Only when dry makes no sense (yogurt, fromage blanc, soup, milk, cheese, bread, fruit) use the food as it is.
+Sport and other activities burn calories: return them negative (\"escalade 1h\" is about -150).";
+
+const HISTORY_INTRO: &str = "\nThe user's own past entries for similar foods (use them to match their portions and habits):\n";
 
 #[derive(Deserialize)]
 pub struct GuessRequest {
@@ -28,11 +31,18 @@ struct Guess {
     calories: f64,
 }
 
-pub async fn guess_calories(Json(req): Json<GuessRequest>) -> impl IntoResponse {
+pub async fn guess_calories(
+    Json(req): Json<GuessRequest>,
+    Extension(search): Extension<Searcher>,
+) -> impl IntoResponse {
     const LABEL: &str = "name guess";
     let name = req.name.trim().to_lowercase();
     if name.chars().count() < 2 || name.chars().count() > 100 {
         return err(LABEL, StatusCode::BAD_REQUEST, "name must be 2 to 100 characters");
+    }
+    // Already logged under this name: the user's own number beats any guess.
+    if let Some(calories) = search.exact(&name) {
+        return (StatusCode::OK, Json(json!({ "calories": calories })));
     }
     if let Some(&calories) = CACHE.lock().unwrap().as_ref().and_then(|c| c.get(&name)) {
         return (StatusCode::OK, Json(json!({ "calories": calories })));
@@ -51,7 +61,16 @@ pub async fn guess_calories(Json(req): Json<GuessRequest>) -> impl IntoResponse 
         "required": ["calories"],
         "additionalProperties": false
     });
-    let content = json!(format!("{}{}", PROMPT, name));
+    let mut prompt = PROMPT.to_string();
+    let similar = search.similar(&name, 8);
+    if !similar.is_empty() {
+        prompt.push_str(HISTORY_INTRO);
+        for (n, c) in similar {
+            prompt.push_str(&format!("- \"{}\": {} kcal\n", n, c));
+        }
+    }
+    prompt.push_str(&format!("\nFood: {}", name));
+    let content = json!(prompt);
     let text = match structured_completion(LABEL, MODEL, "low", 2000, content, schema).await {
         Ok(t) => t,
         Err(e) => return e,
