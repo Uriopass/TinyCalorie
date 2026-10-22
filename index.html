@@ -698,7 +698,7 @@
             delete cal.dataset.guessed;
         }
         clearTimeout(guessTimer);
-        guessTimer = setTimeout(runGuess, 400);
+        guessTimer = setTimeout(runGuess, 250);
     }
 
     // Starts the debounced guess now if it is still waiting; returns the in-flight guess, if any.

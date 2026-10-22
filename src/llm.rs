@@ -49,11 +49,13 @@ impl DailyLimit {
 static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
 /// Sends one user message to OpenRouter and returns the model's JSON text, which follows `schema`.
+/// `provider` is OpenRouter's provider routing object, e.g. {"order": ["Cerebras"]}.
 pub async fn structured_completion(
     label: &str,
     model: &str,
     effort: &str,
     max_tokens: u32,
+    provider: Option<Value>,
     content: Value,
     schema: Value,
 ) -> Result<String, ApiError> {
@@ -68,7 +70,7 @@ pub async fn structured_completion(
         }
     };
 
-    let body = json!({
+    let mut body = json!({
         "model": model,
         "max_tokens": max_tokens,
         "reasoning": {"effort": effort},
@@ -78,6 +80,9 @@ pub async fn structured_completion(
         },
         "messages": [{"role": "user", "content": content}]
     });
+    if let Some(provider) = provider {
+        body["provider"] = provider;
+    }
 
     let resp = CLIENT
         .get_or_init(reqwest::Client::new)
@@ -87,12 +92,21 @@ pub async fn structured_completion(
         .json(&body)
         .send()
         .await
-        .map_err(|e| err(label, StatusCode::BAD_GATEWAY, format!("request failed: {}", e)))?;
+        .map_err(|e| {
+            err(
+                label,
+                StatusCode::BAD_GATEWAY,
+                format!("request failed: {}", e),
+            )
+        })?;
     let status = resp.status();
-    let msg: Value = resp
-        .json()
-        .await
-        .map_err(|e| err(label, StatusCode::BAD_GATEWAY, format!("bad response: {}", e)))?;
+    let msg: Value = resp.json().await.map_err(|e| {
+        err(
+            label,
+            StatusCode::BAD_GATEWAY,
+            format!("bad response: {}", e),
+        )
+    })?;
     if !status.is_success() {
         return Err(err(
             label,
@@ -103,9 +117,10 @@ pub async fn structured_completion(
 
     let usage = &msg["usage"];
     tracing::info!(
-        "{}: model={} prompt_tokens={} completion_tokens={} (reasoning={}) cost=${}",
+        "{}: model={} provider={} prompt_tokens={} completion_tokens={} (reasoning={}) cost=${}",
         label,
         msg["model"],
+        msg["provider"],
         usage["prompt_tokens"],
         usage["completion_tokens"],
         usage["completion_tokens_details"]["reasoning_tokens"],

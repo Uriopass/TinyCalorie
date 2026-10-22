@@ -6,8 +6,10 @@ use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-// Sonnet at low effort answered in ~1.8s and followed the weight rules more reliably than Haiku.
-const MODEL: &str = "anthropic/claude-sonnet-5.5";
+// gpt-oss-120b on Cerebras answers in ~0.4s with about the same accuracy on the user's
+// conventions as Claude Sonnet 5.5 (~1.6s) and Haiku 5.5 (~1.5s). Groq was as fast but returned
+// broken JSON, so Cerebras goes first and the other hosts are only a fallback.
+const MODEL: &str = "openai/gpt-oss-120b";
 static LIMIT: DailyLimit = DailyLimit::new("GUESS_DAILY_LIMIT", 500);
 static CACHE: Mutex<Option<HashMap<String, f64>>> = Mutex::new(None);
 
@@ -39,7 +41,11 @@ pub async fn guess_calories(
     const LABEL: &str = "name guess";
     let name = req.name.trim().to_lowercase();
     if name.chars().count() < 2 || name.chars().count() > 100 {
-        return err(LABEL, StatusCode::BAD_REQUEST, "name must be 2 to 100 characters");
+        return err(
+            LABEL,
+            StatusCode::BAD_REQUEST,
+            "name must be 2 to 100 characters",
+        );
     }
     // Already logged under this name: the user's own number beats any guess.
     if let Some(calories) = search.exact(&name) {
@@ -72,7 +78,17 @@ pub async fn guess_calories(
     }
     prompt.push_str(&format!("\nFood: {}", name));
     let content = json!(prompt);
-    let text = match structured_completion(LABEL, MODEL, "low", 2000, content, schema).await {
+    let text = match structured_completion(
+        LABEL,
+        MODEL,
+        "low",
+        2000,
+        Some(json!({"order": ["Cerebras"]})),
+        content,
+        schema,
+    )
+    .await
+    {
         Ok(t) => t,
         Err(e) => return e,
     };
@@ -85,6 +101,10 @@ pub async fn guess_calories(
                 .insert(name, g.calories);
             (StatusCode::OK, Json(json!({ "calories": g.calories })))
         }
-        Err(_) => err(LABEL, StatusCode::BAD_GATEWAY, "could not parse model output"),
+        Err(_) => err(
+            LABEL,
+            StatusCode::BAD_GATEWAY,
+            "could not parse model output",
+        ),
     }
 }

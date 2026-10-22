@@ -56,12 +56,17 @@ pub async fn estimate_photo(Json(req): Json<PhotoRequest>) -> impl IntoResponse 
         "required": ["name", "calories", "multiplier"],
         "additionalProperties": false
     });
-    let text = match structured_completion(LABEL, MODEL, "medium", 16000, content, schema).await {
-        Ok(t) => t,
-        Err(e) => return e,
-    };
+    let text =
+        match structured_completion(LABEL, MODEL, "medium", 16000, None, content, schema).await {
+            Ok(t) => t,
+            Err(e) => return e,
+        };
     match serde_json::from_str::<PhotoEstimate>(&text) {
         Ok(estimate) => (StatusCode::OK, Json(json!(estimate))),
-        Err(_) => err(LABEL, StatusCode::BAD_GATEWAY, "could not parse model output"),
+        Err(_) => err(
+            LABEL,
+            StatusCode::BAD_GATEWAY,
+            "could not parse model output",
+        ),
     }
 }
